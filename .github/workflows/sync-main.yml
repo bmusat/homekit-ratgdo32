@@ -1,0 +1,89 @@
+name: Sync main and main-fork
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  UPSTREAM_REPO: https://github.com/ratgdo/homekit-ratgdo32.git
+
+jobs:
+  sync:
+    if: github.repository == 'bmusat/homekit-ratgdo32'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "fork-automation"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch upstream main --tags
+
+      - name: Fast-forward main to upstream/main
+        id: ff
+        run: |
+          if git merge --ff-only upstream/main; then
+            echo "status=ok" >> "$GITHUB_OUTPUT"
+            echo "note=main was already up to date or fast-forwarded cleanly" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=diverged" >> "$GITHUB_OUTPUT"
+            echo "note=main is not a clean ancestor of upstream/main - manual investigation needed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push main and tags
+        if: steps.ff.outputs.status == 'ok'
+        run: |
+          git push origin main
+          git push origin --tags
+
+      - name: Merge main into main-fork
+        id: merge_fork
+        if: steps.ff.outputs.status == 'ok'
+        run: |
+          git fetch origin main-fork
+          git checkout -B main-fork origin/main-fork
+          if git merge main --no-edit; then
+            echo "status=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            git merge --abort || true
+          fi
+
+      - name: Push main-fork
+        if: steps.merge_fork.outputs.status == 'ok'
+        run: git push origin main-fork
+
+      - name: Trigger build-check
+        if: steps.merge_fork.outputs.status == 'ok'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run build-check.yml --repo ${{ github.repository }} --ref main-fork
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            if [ "${{ steps.ff.outputs.status }}" != "ok" ]; then
+              echo "### WARNING: main did not fast-forward"
+              echo "main is not a clean ancestor of upstream/main (unexpected - main should never have local commits). Needs manual investigation."
+            elif [ "${{ steps.merge_fork.outputs.status }}" = "conflict" ]; then
+              echo "### WARNING: main-fork merge conflict"
+              echo "main fast-forwarded cleanly, but merging main into main-fork produced a conflict. Needs manual resolution."
+            else
+              echo "### OK"
+              echo "main fast-forwarded to upstream/main (tags included), and main-fork merged cleanly."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,101 @@
+name: Build Check (fix branches vs upstream)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_REPO: https://github.com/ratgdo/homekit-ratgdo32.git
+
+jobs:
+  build-check:
+    if: github.repository == 'bmusat/homekit-ratgdo32'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [laser-on-door-open, lock-toggle-dedup]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 0
+          submodules: true
+
+      - name: Configure git identity
+        run: |
+          git config user.name "fork-automation"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch upstream main
+
+      - name: Scratch-merge upstream/main (never pushed)
+        id: merge
+        run: |
+          if git merge --no-commit --no-ff upstream/main; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort || true
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/cache@v6
+        if: steps.merge.outputs.conflict == 'false'
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+
+      - uses: actions/setup-python@v6
+        if: steps.merge.outputs.conflict == 'false'
+        with:
+          python-version: "3.13"
+
+      - name: Install PlatformIO Core
+        if: steps.merge.outputs.conflict == 'false'
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade platformio
+
+      - name: Build PlatformIO project
+        id: build
+        if: steps.merge.outputs.conflict == 'false'
+        run: |
+          if PLATFORMIO_BUILD_DIR=.pio/build-check pio run -e ratgdo_esp32dev; then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload firmware artifact
+        if: steps.merge.outputs.conflict == 'false' && steps.build.outputs.result == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.branch }}-firmware
+          retention-days: 14
+          path: |
+            .pio/build-check/ratgdo_esp32dev/firmware.bin
+            .pio/build-check/ratgdo_esp32dev/firmware.elf
+
+      - name: Job summary
+        if: always()
+        run: |
+          BRANCH="${{ matrix.branch }}"
+          {
+            if [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
+              echo "### WARNING: \`$BRANCH\` merge conflict"
+              echo "Scratch merge of upstream/main into \`$BRANCH\` no longer applies cleanly. Manual rebase needed."
+            elif [ "${{ steps.build.outputs.result }}" = "failure" ]; then
+              echo "### FAILED: \`$BRANCH\` build failed"
+              echo "Merges cleanly with upstream/main, but \`pio run -e ratgdo_esp32dev\` failed."
+            else
+              echo "### OK: \`$BRANCH\`"
+              echo "Merges cleanly with upstream/main and builds successfully. Firmware artifact uploaded (14-day retention)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
