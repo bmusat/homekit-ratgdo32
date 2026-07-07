@@ -75,15 +75,21 @@ jobs:
       - name: Job summary
         if: always()
         run: |
-          {
-            if [ "${{ steps.ff.outputs.status }}" != "ok" ]; then
+          if [ "${{ steps.ff.outputs.status }}" != "ok" ]; then
+            {
               echo "### WARNING: main did not fast-forward"
-              echo "main is not a clean ancestor of upstream/main (unexpected - main should never have local commits). Needs manual investigation."
-            elif [ "${{ steps.merge_fork.outputs.status }}" = "conflict" ]; then
+              echo "main is not a clean ancestor of upstream/main - upstream likely rewrote history. Needs manual investigation."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          elif [ "${{ steps.merge_fork.outputs.status }}" = "conflict" ]; then
+            {
               echo "### WARNING: main-fork merge conflict"
               echo "main fast-forwarded cleanly, but merging main into main-fork produced a conflict. Needs manual resolution."
-            else
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          else
+            {
               echo "### OK"
               echo "main fast-forwarded to upstream/main (tags included), and main-fork merged cleanly."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
