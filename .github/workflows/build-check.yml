@@ -34,8 +34,33 @@ jobs:
           git remote add upstream "$UPSTREAM_REPO"
           git fetch upstream main
 
+      - name: Ensure marker file exists
+        run: touch .build-check-marker
+
+      - name: Compute SHAs and time bucket
+        id: keys
+        run: |
+          echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+          echo "branch_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "bucket=$(( $(date -u +%s) / 86400 / 80 ))" >> "$GITHUB_OUTPUT"
+
+      - name: Check if this exact code was already verified
+        id: sha_cache
+        uses: actions/cache@v6
+        with:
+          path: .build-check-marker
+          key: build-check-sha-${{ matrix.branch }}-${{ steps.keys.outputs.upstream_sha }}-${{ steps.keys.outputs.branch_sha }}
+
+      - name: Check if we've refreshed the artifact recently
+        id: time_cache
+        uses: actions/cache@v6
+        with:
+          path: .build-check-marker
+          key: build-check-freshness-${{ matrix.branch }}-${{ steps.keys.outputs.bucket }}
+
       - name: Scratch-merge upstream/main (never pushed)
         id: merge
+        if: steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true'
         run: |
           if git merge --no-commit --no-ff upstream/main; then
             echo "conflict=false" >> "$GITHUB_OUTPUT"
@@ -78,7 +103,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.branch }}-firmware
-          retention-days: 14
+          retention-days: 90
           path: |
             .pio/build-check/ratgdo_esp32dev/firmware.bin
             .pio/build-check/ratgdo_esp32dev/firmware.elf
@@ -88,7 +113,10 @@ jobs:
         run: |
           BRANCH="${{ matrix.branch }}"
           {
-            if [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
+            if [ "${{ steps.merge.outcome }}" = "skipped" ]; then
+              echo "### SKIPPED: \`$BRANCH\`"
+              echo "No changes since the last verified build, and still within the 90-day artifact refresh window. Nothing rebuilt."
+            elif [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
               echo "### WARNING: \`$BRANCH\` merge conflict"
               echo "Scratch merge of upstream/main into \`$BRANCH\` no longer applies cleanly. Manual rebase needed."
             elif [ "${{ steps.build.outputs.result }}" = "failure" ]; then
@@ -96,6 +124,6 @@ jobs:
               echo "Merges cleanly with upstream/main, but \`pio run -e ratgdo_esp32dev\` failed."
             else
               echo "### OK: \`$BRANCH\`"
-              echo "Merges cleanly with upstream/main and builds successfully. Firmware artifact uploaded (14-day retention)."
+              echo "Merges cleanly with upstream/main and builds successfully. Firmware artifact uploaded (90-day retention)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
