@@ -17,6 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         branch: [laser-on-door-open, lock-toggle-dedup]
+        variant: [pinned, latest]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,6 +31,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
 
       - name: Fetch upstream
+        if: matrix.variant == 'latest'
         run: |
           git remote add upstream "$UPSTREAM_REPO"
           git fetch upstream main
@@ -37,30 +39,32 @@ jobs:
       - name: Ensure marker file exists
         run: touch .build-check-marker
 
-      - name: Compute SHAs and time bucket
+      - name: Compute keys
         id: keys
         run: |
-          echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
           echo "branch_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "bucket=$(( $(date -u +%s) / 86400 / 80 ))" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.variant }}" = "latest" ]; then
+            echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Check if this exact code was already verified
+      - name: Check if this exact combination was already verified
         id: sha_cache
         uses: actions/cache@v6
         with:
           path: .build-check-marker
-          key: build-check-sha-${{ matrix.branch }}-${{ steps.keys.outputs.upstream_sha }}-${{ steps.keys.outputs.branch_sha }}
+          key: build-check-${{ matrix.variant }}-${{ matrix.branch }}-${{ steps.keys.outputs.branch_sha }}-${{ steps.keys.outputs.upstream_sha }}
 
       - name: Check if we've refreshed the artifact recently
         id: time_cache
         uses: actions/cache@v6
         with:
           path: .build-check-marker
-          key: build-check-freshness-${{ matrix.branch }}-${{ steps.keys.outputs.bucket }}
+          key: build-check-freshness-${{ matrix.variant }}-${{ matrix.branch }}-${{ steps.keys.outputs.bucket }}
 
       - name: Scratch-merge upstream/main (never pushed)
         id: merge
-        if: steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true'
+        if: matrix.variant == 'latest' && (steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true')
         run: |
           if git merge --no-commit --no-ff upstream/main; then
             echo "conflict=false" >> "$GITHUB_OUTPUT"
@@ -70,7 +74,7 @@ jobs:
           fi
 
       - uses: actions/cache@v6
-        if: steps.merge.outputs.conflict == 'false'
+        if: steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true'
         with:
           path: |
             ~/.cache/pip
@@ -78,19 +82,21 @@ jobs:
           key: ${{ runner.os }}-pio
 
       - uses: actions/setup-python@v6
-        if: steps.merge.outputs.conflict == 'false'
+        if: steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true'
         with:
           python-version: "3.13"
 
       - name: Install PlatformIO Core
-        if: steps.merge.outputs.conflict == 'false'
+        if: steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true'
         run: |
           pip install --upgrade pip
           pip install --upgrade platformio
 
       - name: Build PlatformIO project
         id: build
-        if: steps.merge.outputs.conflict == 'false'
+        if: |
+          (steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true') &&
+          (matrix.variant == 'pinned' || steps.merge.outputs.conflict == 'false')
         run: |
           if PLATFORMIO_BUILD_DIR=.pio/build-check pio run -e ratgdo_esp32dev; then
             echo "result=success" >> "$GITHUB_OUTPUT"
@@ -99,10 +105,10 @@ jobs:
           fi
 
       - name: Upload firmware artifact
-        if: steps.merge.outputs.conflict == 'false' && steps.build.outputs.result == 'success'
+        if: steps.build.outputs.result == 'success'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.branch }}-firmware
+          name: ${{ matrix.branch }}-${{ matrix.variant }}-firmware
           retention-days: 90
           path: |
             .pio/build-check/ratgdo_esp32dev/firmware.bin
@@ -112,18 +118,23 @@ jobs:
         if: always()
         run: |
           BRANCH="${{ matrix.branch }}"
+          VARIANT="${{ matrix.variant }}"
           {
-            if [ "${{ steps.merge.outcome }}" = "skipped" ]; then
-              echo "### SKIPPED: \`$BRANCH\`"
+            if [ "${{ steps.sha_cache.outputs.cache-hit }}" = "true" ] && [ "${{ steps.time_cache.outputs.cache-hit }}" = "true" ]; then
+              echo "### SKIPPED: \`$BRANCH\` ($VARIANT)"
               echo "No changes since the last verified build, and still within the 90-day artifact refresh window. Nothing rebuilt."
-            elif [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
-              echo "### WARNING: \`$BRANCH\` merge conflict"
+            elif [ "$VARIANT" = "latest" ] && [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
+              echo "### WARNING: \`$BRANCH\` ($VARIANT) merge conflict"
               echo "Scratch merge of upstream/main into \`$BRANCH\` no longer applies cleanly. Manual rebase needed."
             elif [ "${{ steps.build.outputs.result }}" = "failure" ]; then
-              echo "### FAILED: \`$BRANCH\` build failed"
-              echo "Merges cleanly with upstream/main, but \`pio run -e ratgdo_esp32dev\` failed."
+              echo "### FAILED: \`$BRANCH\` ($VARIANT) build failed"
+              echo "\`pio run -e ratgdo_esp32dev\` failed."
             else
-              echo "### OK: \`$BRANCH\`"
-              echo "Merges cleanly with upstream/main and builds successfully. Firmware artifact uploaded (90-day retention)."
+              echo "### OK: \`$BRANCH\` ($VARIANT)"
+              if [ "$VARIANT" = "pinned" ]; then
+                echo "Builds successfully as-is (no upstream merge, exactly what's pushed to the branch). Firmware artifact uploaded (90-day retention)."
+              else
+                echo "Merges cleanly with upstream/main and builds successfully. Firmware artifact uploaded (90-day retention)."
+              fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"
