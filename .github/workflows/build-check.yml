@@ -86,14 +86,13 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Fetch branch-tags mapping from main-fork
+        run: git fetch origin main-fork --depth 1
+
       - name: Compute version tag
         id: vertag
         run: |
-          case "${{ matrix.branch }}" in
-            laser-on-door-open) SHORT="laser-fix" ;;
-            lock-toggle-dedup) SHORT="lock-dedup" ;;
-            *) SHORT="${{ matrix.branch }}" ;;
-          esac
+          SHORT=$(git show origin/main-fork:.github/branch-tags.json | jq -r --arg b "${{ matrix.branch }}" '.[$b] // $b')
           echo "tag=${SHORT}-${{ matrix.variant }}" >> "$GITHUB_OUTPUT"
 
       - name: Install PlatformIO Core
