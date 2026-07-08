@@ -8,6 +8,10 @@ permissions:
 
 env:
   UPSTREAM_REPO: https://github.com/ratgdo/homekit-ratgdo32.git
+  # Bump this whenever a workflow change should force a rebuild even though
+  # the branch/upstream SHAs haven't changed (the cache keys don't otherwise
+  # know the pipeline itself changed).
+  CACHE_EPOCH: "2"
 
 jobs:
   build-check:
@@ -53,14 +57,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .build-check-marker
-          key: build-check-${{ matrix.variant }}-${{ matrix.branch }}-${{ steps.keys.outputs.branch_sha }}-${{ steps.keys.outputs.upstream_sha }}
+          key: build-check-${{ env.CACHE_EPOCH }}-${{ matrix.variant }}-${{ matrix.branch }}-${{ steps.keys.outputs.branch_sha }}-${{ steps.keys.outputs.upstream_sha }}
 
       - name: Check if we've refreshed the artifact recently
         id: time_cache
         uses: actions/cache@v6
         with:
           path: .build-check-marker
-          key: build-check-freshness-${{ matrix.variant }}-${{ matrix.branch }}-${{ steps.keys.outputs.bucket }}
+          key: build-check-freshness-${{ env.CACHE_EPOCH }}-${{ matrix.variant }}-${{ matrix.branch }}-${{ steps.keys.outputs.bucket }}
 
       - name: Scratch-merge upstream/main (never pushed)
         id: merge
