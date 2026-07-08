@@ -86,6 +86,16 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Compute version tag
+        id: vertag
+        run: |
+          case "${{ matrix.branch }}" in
+            laser-on-door-open) SHORT="laser-fix" ;;
+            lock-toggle-dedup) SHORT="lock-dedup" ;;
+            *) SHORT="${{ matrix.branch }}" ;;
+          esac
+          echo "tag=${SHORT}-${{ matrix.variant }}" >> "$GITHUB_OUTPUT"
+
       - name: Install PlatformIO Core
         if: steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true'
         run: |
@@ -98,7 +108,7 @@ jobs:
           (steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true') &&
           (matrix.variant == 'pinned' || steps.merge.outputs.conflict == 'false')
         run: |
-          if PLATFORMIO_BUILD_DIR=.pio/build-check pio run -e ratgdo_esp32dev; then
+          if PLATFORMIO_BUILD_DIR=.pio/build-check PLATFORMIO_BUILD_FLAGS='-D VERSION_TAG=${{ steps.vertag.outputs.tag }}' pio run -e ratgdo_esp32dev; then
             echo "result=success" >> "$GITHUB_OUTPUT"
           else
             echo "result=failure" >> "$GITHUB_OUTPUT"
