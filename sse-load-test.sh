@@ -7,7 +7,10 @@
 #                                               # (no TCP close sent - simulates a
 #                                               # phone dropping off WiFi mid-connection)
 #   ./sse-load-test.sh list                    # show running test containers
-#   ./sse-load-test.sh stop                    # tear down all test containers
+#   ./sse-load-test.sh stop                    # tear down all test containers, then
+#                                               # wait 15s for connections to actually
+#                                               # close (Docker Desktop's VM networking
+#                                               # lags several seconds behind `docker rm`)
 #
 # Example:
 #   ./sse-load-test.sh start 192.168.168.180 6
@@ -27,16 +30,25 @@ case "${1:-}" in
     COUNT="${3:-6}"
     for i in $(seq 1 "$COUNT"); do
       NAME="${PREFIX}-${i}"
+      # Generate the UUID on the host (not inside the container) so we can print
+      # it up front - lets you grep ratgdo's log for this exact string to know
+      # precisely which container a given subscription/removal line belongs to,
+      # without needing containers to have distinct source IPs.
+      UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
       docker rm -f "$NAME" >/dev/null 2>&1 || true
-      docker run -d --name "$NAME" "$IMAGE" sh -c "
-        UUID=\$(cat /proc/sys/kernel/random/uuid)
+      docker run -d --name "$NAME" -e UUID="$UUID" "$IMAGE" sh -c "
         URL=\$(curl -s \"http://${HOST}/rest/events/subscribe?id=\${UUID}\")
+        case \"\$URL\" in
+          /*) ;;
+          *) echo \"subscribe rejected: \$URL\" >&2; exit 1 ;;
+        esac
         exec curl -s -N \"http://${HOST}\${URL}?id=\${UUID}\"
       " >/dev/null
-      echo "started $NAME"
+      echo "started $NAME  uuid=$UUID"
     done
     echo ""
     echo "Now check ratgdo's live log/status - you should see $COUNT new SSE subscriptions."
+    echo "grep the log for the uuid above to identify which container a line belongs to."
     ;;
 
   sever)
@@ -54,6 +66,14 @@ case "${1:-}" in
 
   stop)
     docker rm -f $(docker ps -aq --filter "name=${PREFIX}") 2>/dev/null || echo "nothing to stop"
+    # Docker Desktop on Mac proxies container networking through a VM, and the
+    # TCP close for a killed container's connection can take 10+ seconds to
+    # actually reach the peer (observed 7-13s in testing) - well after `docker
+    # rm` itself returns. Starting a new batch immediately can make ratgdo's
+    # subscription table still show the previous batch as occupied. Wait it
+    # out here so `stop` really means stopped before you run `start` again.
+    echo "waiting 15s for connections to fully close (Docker Desktop networking lag)..."
+    sleep 15
     ;;
 
   *)
