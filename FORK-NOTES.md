@@ -8,7 +8,7 @@ there are two branches I'm working on.
 
 `main` is kept as an untouched, byte-for-byte mirror of upstream `main` which is always safe to
 fast-forward. This branch (`main-fork`) is the default branch and it carries the same source
-as `main`, plus some unique files (this `FORK-NOTES.md` and `viewlog-fix.sh`) and the CI automation below.
+as `main`, plus some unique files (this `FORK-NOTES.md`, `viewlog-fix.sh`, and `sse-load-test.sh`) and the CI automation below.
 
 ## Active fix branches
 
@@ -23,7 +23,19 @@ pull requests to upstream once validated.
 ## Automation
 
 - `sync-main.yml` — daily, fast-forwards `main` to `upstream/main`, then merges `main` into
-  `main-fork`.
-- `build-check.yml` — daily, dry-run merges the latest upstream into each fix branch (scratch
-  only, never pushed) and builds the result via PlatformIO. Result is written to the run's job
-  summary, so problems surface before a manual rebase attempt.
+  `main-fork`. On success, triggers `build-check.yml`.
+- `build-check.yml` — runs via the `sync-main.yml` chain above or manual dispatch (no
+  independent schedule). Dry-run merges the latest upstream into each fix branch (scratch
+  only, never pushed) and builds both a `pinned` (as-pushed) and `latest` (merged with
+  upstream) variant via PlatformIO. Skips rebuilding when the exact code combination was
+  already verified and the artifact is still fresh (90-day cap). Result is written to the
+  run's job summary.
+
+## Tools
+
+- `viewlog-fix.sh <host>` — streams the device's live log over SSE (corrected version of
+  upstream's `viewlog.sh`, which has a query-param bug that silently breaks it).
+- `sse-load-test.sh` — Docker-based load test for the SSE subscription slots (see script
+  header for usage). Used to reproduce a socket-exhaustion issue caused by stale/dead SSE
+  connections (e.g. a phone dropping off WiFi mid-session) accumulating until the device
+  becomes unresponsive.
