@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [laser-on-door-open, lock-toggle-dedup]
+        branch: [laser-on-door-open, lock-toggle-dedup, lock-state-crosstalk]
         variant: [pinned, latest]
     steps:
       - uses: actions/checkout@v7

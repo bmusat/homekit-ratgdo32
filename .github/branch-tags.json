@@ -1,4 +1,5 @@
 {
   "laser-on-door-open": "laser-fix",
-  "lock-toggle-dedup": "lock-dedup"
+  "lock-toggle-dedup": "lock-dedup",
+  "lock-state-crosstalk": "lock-xtalk"
 }
