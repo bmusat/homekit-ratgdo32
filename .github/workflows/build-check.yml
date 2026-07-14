@@ -149,9 +149,11 @@ jobs:
             elif [ "$VARIANT" = "latest" ] && [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
               echo "### WARNING: \`$BRANCH\` ($VARIANT) merge conflict"
               echo "Scratch merge of upstream/main into \`$BRANCH\` no longer applies cleanly. Manual rebase needed."
+              exit 1
             elif [ "${{ steps.build.outputs.result }}" = "failure" ]; then
               echo "### FAILED: \`$BRANCH\` ($VARIANT) build failed"
               echo "\`pio run -e ratgdo_esp32dev\` failed."
+              exit 1
             else
               echo "### OK: \`$BRANCH\` ($VARIANT)"
               if [ "$VARIANT" = "pinned" ]; then
