@@ -8,7 +8,8 @@ there are three branches I'm working on.
 
 `main` is kept as an untouched, byte-for-byte mirror of upstream `main` which is always safe to
 fast-forward. This branch (`main-fork`) is the default branch and it carries the same source
-as `main`, plus some unique files (this `FORK-NOTES.md`, `viewlog-fix.sh`, and `sse-load-test.sh`) and the CI automation below.
+as `main`, plus some unique files (this `FORK-NOTES.md`, `viewlog-fix.sh`, `sse-load-test.sh`, and
+`find-artifact.sh`) and the CI automation below.
 
 ## Active fix branches
 
@@ -41,3 +42,8 @@ requests to upstream once validated.
   header for usage). Used to reproduce a socket-exhaustion issue caused by stale/dead SSE
   connections (e.g. a phone dropping off WiFi mid-session) accumulating until the device
   becomes unresponsive.
+- `find-artifact.sh [pattern] [--download]` — finds the most recent non-expired
+  `build-check.yml` artifact(s) via the repo-wide Actions API, since `build-check.yml`'s
+  skip-if-unchanged logic means most runs produce nothing and the Actions UI is tedious to
+  search by hand. Lists the latest per branch/variant by default; pass a pattern to filter,
+  add `--download` to fetch the single matching one directly.
