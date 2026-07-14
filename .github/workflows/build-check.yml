@@ -40,9 +40,6 @@ jobs:
           git remote add upstream "$UPSTREAM_REPO"
           git fetch upstream main
 
-      - name: Ensure marker file exists
-        run: touch .build-check-marker
-
       - name: Compute keys
         id: keys
         run: |
@@ -136,6 +133,14 @@ jobs:
           path: |
             .pio/build-check/ratgdo_esp32dev/firmware.bin
             .pio/build-check/ratgdo_esp32dev/firmware.elf
+
+      - name: Mark verified
+        # Only created on genuine success, so a conflicting or failed run never
+        # populates the cache - the next run with the same branch/upstream SHAs
+        # gets a real cache miss and re-attempts (and re-fails) instead of
+        # silently skipping an unresolved problem.
+        if: steps.build.outputs.result == 'success'
+        run: touch .build-check-marker
 
       - name: Job summary
         if: always()
