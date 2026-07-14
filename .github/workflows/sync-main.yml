@@ -2,7 +2,7 @@ name: Sync main and main-fork
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "9 6 * * *"
   workflow_dispatch:
 
 permissions:
