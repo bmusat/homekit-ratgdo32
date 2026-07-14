@@ -77,6 +77,16 @@ jobs:
             echo "conflict=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Compute source tree hash
+        id: treehash
+        # Captures the exact file content about to be built - independent of whether
+        # it's ever committed. The scratch-merge above uses --no-commit, so HEAD never
+        # moves even when latest genuinely pulls in new upstream content; a commit SHA
+        # would misleadingly show pinned/latest as "the same" every time. write-tree
+        # hashes the actual staged content instead, so it only matches when the two
+        # variants are truly compiling identical source.
+        run: echo "hash=$(git write-tree | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/cache@v6
         if: steps.sha_cache.outputs.cache-hit != 'true' || steps.time_cache.outputs.cache-hit != 'true'
         with:
@@ -121,7 +131,7 @@ jobs:
         if: steps.build.outputs.result == 'success'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.branch }}-${{ matrix.variant }}-firmware
+          name: ${{ matrix.branch }}-${{ matrix.variant }}-${{ steps.treehash.outputs.hash }}-firmware
           retention-days: 90
           path: |
             .pio/build-check/ratgdo_esp32dev/firmware.bin

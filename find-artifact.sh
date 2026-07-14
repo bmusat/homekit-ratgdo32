@@ -21,6 +21,25 @@
 
 set -euo pipefail
 
+usage() {
+  cat <<'EOF'
+Usage:
+  ./find-artifact.sh                        list the latest of each artifact
+  ./find-artifact.sh <pattern>               filter names by pattern (e.g. branch name)
+  ./find-artifact.sh <pattern> --download    also download the single latest match
+  ./find-artifact.sh -h | --help             show this help
+
+Examples:
+  ./find-artifact.sh
+  ./find-artifact.sh lock-state-crosstalk
+  ./find-artifact.sh lock-state-crosstalk-latest --download
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
 REPO="bmusat/homekit-ratgdo32"
 PATTERN="${1:-.}"
 DOWNLOAD=false
@@ -30,7 +49,7 @@ MATCHES=$(gh api "repos/$REPO/actions/artifacts" | jq --arg p "$PATTERN" '
   [.artifacts[] | select(.name | test($p)) | select(.expired == false)]
   | group_by(.name)
   | map(sort_by(.created_at) | reverse | .[0])
-  | sort_by(.name)
+  | sort_by(.created_at) | reverse
 ')
 
 COUNT=$(echo "$MATCHES" | jq 'length')
@@ -39,7 +58,10 @@ if [ "$COUNT" -eq 0 ]; then
   exit 1
 fi
 
-echo "$MATCHES" | jq -r '.[] | "\(.name)\t\(.created_at)\texpires \(.expires_at)\trun \(.workflow_run.id)"' | column -t -s $'\t'
+{
+  echo -e "NAME\tCREATED\tEXPIRES\tRUN"
+  echo "$MATCHES" | jq -r '.[] | "\(.name)\t\(.created_at)\texpires \(.expires_at)\trun \(.workflow_run.id)"'
+} | column -t -s $'\t'
 
 if [ "$COUNT" -gt 1 ]; then
   if [ "$DOWNLOAD" = true ]; then
