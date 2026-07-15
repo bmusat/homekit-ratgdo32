@@ -2,22 +2,22 @@
 # Load-test ratgdo's SSE subscription slots using isolated Docker containers.
 #
 # Usage:
-#   ./sse-load-test.sh start <host> [count]   # spin up N simulated clients (default 6)
-#   ./sse-load-test.sh sever <name>            # silently kill one client's network
-#                                               # (no TCP close sent - simulates a
-#                                               # phone dropping off WiFi mid-connection)
-#   ./sse-load-test.sh list                    # show running test containers
-#   ./sse-load-test.sh stop                    # tear down all test containers, then
-#                                               # wait 15s for connections to actually
-#                                               # close (Docker Desktop's VM networking
-#                                               # lags several seconds behind `docker rm`)
+#   ./tools/sse-load-test.sh start <host> [count]   # spin up N simulated clients (default 6)
+#   ./tools/sse-load-test.sh sever <name>            # silently kill one client's network
+#                                                       # (no TCP close sent - simulates a
+#                                                       # phone dropping off WiFi mid-connection)
+#   ./tools/sse-load-test.sh list                    # show running test containers
+#   ./tools/sse-load-test.sh stop                    # tear down all test containers, then
+#                                                       # wait 15s for connections to actually
+#                                                       # close (Docker Desktop's VM networking
+#                                                       # lags several seconds behind `docker rm`)
 #
 # Example:
-#   ./sse-load-test.sh start 192.168.168.180 6
-#   ./sse-load-test.sh list
-#   ./sse-load-test.sh sever ratgdo-load-3
+#   ./tools/sse-load-test.sh start 192.168.168.180 6
+#   ./tools/sse-load-test.sh list
+#   ./tools/sse-load-test.sh sever ratgdo-load-3
 #   # watch ratgdo's live log for "fail on fd ..., errno: 11" to start repeating
-#   ./sse-load-test.sh stop
+#   ./tools/sse-load-test.sh stop
 
 set -euo pipefail
 

@@ -10,29 +10,29 @@
 # is a single query regardless of how many runs were skips.
 #
 # Usage:
-#   ./find-artifact.sh                        # list the latest of each artifact
-#   ./find-artifact.sh <pattern>               # filter names by pattern (e.g. branch name)
-#   ./find-artifact.sh <pattern> --download    # also download the single latest match
+#   ./tools/find-artifact.sh                        # list the latest of each artifact
+#   ./tools/find-artifact.sh <pattern>               # filter names by pattern (e.g. branch name)
+#   ./tools/find-artifact.sh <pattern> --download    # also download the single latest match
 #
 # Examples:
-#   ./find-artifact.sh
-#   ./find-artifact.sh lock-state-crosstalk
-#   ./find-artifact.sh lock-state-crosstalk-latest --download
+#   ./tools/find-artifact.sh
+#   ./tools/find-artifact.sh lock-state-crosstalk
+#   ./tools/find-artifact.sh lock-state-crosstalk-latest --download
 
 set -euo pipefail
 
 usage() {
-  cat <<'EOF'
+  cat <<EOF
 Usage:
-  ./find-artifact.sh                        list the latest of each artifact
-  ./find-artifact.sh <pattern>               filter names by pattern (e.g. branch name)
-  ./find-artifact.sh <pattern> --download    also download the single latest match
-  ./find-artifact.sh -h | --help             show this help
+  $0                        list the latest of each artifact
+  $0 <pattern>               filter names by pattern (e.g. branch name)
+  $0 <pattern> --download    also download the single latest match
+  $0 -h | --help             show this help
 
 Examples:
-  ./find-artifact.sh
-  ./find-artifact.sh lock-state-crosstalk
-  ./find-artifact.sh lock-state-crosstalk-latest --download
+  $0
+  $0 lock-state-crosstalk
+  $0 lock-state-crosstalk-latest --download
 EOF
 }
 

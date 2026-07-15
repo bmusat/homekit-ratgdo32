@@ -26,6 +26,7 @@ below in the Tools section) and the CI automation below.
   `DEV_GarageDoor::update()` acting on both the door and lock characteristics on every HomeKit
   write to the service, instead of only the one actually changed. Opening/closing the door
   could silently re-send whatever the lock was last set to.
+
 | Branch | Based on | Status |
 |---|---|---|
 | [`laser-on-door-open`](../../tree/laser-on-door-open) | `v3.5.0-7-gcdf0708` (current `upstream/main`) | Fully caught up |
@@ -59,11 +60,11 @@ Status: local testing in progress; intended as separate pull requests to upstrea
 
 Fork-only helper scripts live in [`tools/`](../../tree/main-fork/tools).
 
-- `tools/sse-load-test.sh` — Docker-based load test for the SSE subscription slots (see script
-  header for usage). Used to reproduce a socket-exhaustion issue caused by stale/dead SSE
-  connections (e.g. a phone dropping off WiFi mid-session) accumulating until the device
+- `./tools/sse-load-test.sh` — Docker-based load test for the SSE subscription slots (see
+  script header for usage). Used to reproduce a socket-exhaustion issue caused by stale/dead
+  SSE connections (e.g. a phone dropping off WiFi mid-session) accumulating until the device
   becomes unresponsive.
-- `tools/find-artifact.sh [pattern] [--download]` — finds the most recent non-expired
+- `./tools/find-artifact.sh [pattern] [--download]` — finds the most recent non-expired
   `build-check.yml` artifact(s) via the repo-wide Actions API, since `build-check.yml`'s
   skip-if-unchanged logic means most runs produce nothing and the Actions UI is tedious to
   search by hand. Lists the latest per branch/variant by default; pass a pattern to filter,
