@@ -4,7 +4,7 @@
 
 This is my fork of [ratgdo/homekit-ratgdo32](https://github.com/ratgdo/homekit-ratgdo32),
 maintained to develop and test personal bug fixes before submitting them upstream.  Currently
-there are three branches tracked here.
+there are four branches tracked here.
 
 `main` is kept as an untouched, byte-for-byte mirror of upstream `main` which is always safe to
 fast-forward. This branch (`main-fork`) is the default branch and it carries the same source
@@ -15,8 +15,12 @@ below in the Tools section) and the CI automation below.
 
 - **[`laser-on-door-open`](../../tree/laser-on-door-open)** — Fires the parking-assist laser
   immediately on door-open instead of waiting on vehicle-presence detection, which took 6+
-  minutes on my install. Also fixes HomeKit not reflecting laser changes triggered by the
-  firmware itself, not just manual toggles.
+  minutes on my install. Minimal, single-commit timing fix — no HomeKit changes.
+- **[`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync)** — Branched on top of
+  `laser-on-door-open`, adds one more commit: fixes HomeKit not reflecting laser state changes
+  that originate from firmware (door-open trigger, vehicle-arrival trigger, or the auto-off
+  timer) instead of a manual toggle. Kept as a separate branch/PR so the timing fix and the
+  HomeKit-sync fix can be reviewed and merged independently.
 - **[`lock-state-crosstalk`](../../tree/lock-state-crosstalk)** — Fixes the "Remotes" toggle
   silently flipping on its own — root-caused via ~5 days of syslog capture to
   `DEV_GarageDoor::update()` acting on both the door and lock characteristics on every HomeKit
@@ -31,6 +35,7 @@ below in the Tools section) and the CI automation below.
 | Branch | Based on | Status |
 |---|---|---|
 | [`laser-on-door-open`](../../tree/laser-on-door-open) | `v3.5.0-7-gcdf0708` (current `upstream/main`) | Fully caught up |
+| [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 1 commit | Fully caught up |
 | [`lock-state-crosstalk`](../../tree/lock-state-crosstalk) | `v3.5.0-7-gcdf0708` (current `upstream/main`) | Fully caught up |
 | [`lock-toggle-dedup`](../../tree/lock-toggle-dedup) | `v3.4.6` | 24 commits behind — shelved, not being rebased |
 
