@@ -83,5 +83,5 @@ if [ "$DOWNLOAD" = true ]; then
   echo "Saved to ./$NAME/"
 else
   echo
-  echo "To download: gh run download $RUN_ID --repo $REPO -n \"$NAME\" -D \"$NAME\""
+  echo "Add --download to fetch it directly: $0 \"$PATTERN\" --download"
 fi
