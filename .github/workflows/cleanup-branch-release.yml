@@ -1,0 +1,34 @@
+name: Cleanup release on branch delete
+
+on:
+  delete:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.repository == 'bmusat/homekit-ratgdo32' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main-fork
+          fetch-depth: 1
+
+      - name: Look up short tag for deleted branch
+        id: lookup
+        run: |
+          SHORT=$(jq -r --arg b "${{ github.event.ref }}" '.[$b] // empty' .github/branch-tags.json)
+          echo "short=$SHORT" >> "$GITHUB_OUTPUT"
+
+      # If branch-tags.json's entry for this branch was already removed before
+      # the branch itself was deleted, this is a no-op - delete the branch first,
+      # then remove its branch-tags.json entry in a follow-up commit, so this
+      # lookup still finds the mapping while it matters.
+      - name: Delete matching pre-release, if any
+        if: steps.lookup.outputs.short != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "${{ steps.lookup.outputs.short }}" --repo "$GITHUB_REPOSITORY" --cleanup-tag -y || true

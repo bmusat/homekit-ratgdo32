@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   UPSTREAM_REPO: https://github.com/ratgdo/homekit-ratgdo32.git
   # Bump this whenever a workflow change should force a rebuild even though
   # the branch/upstream SHAs haven't changed (the cache keys don't otherwise
   # know the pipeline itself changed).
-  CACHE_EPOCH: "3"
+  CACHE_EPOCH: "4"
 
 jobs:
   build-check:
@@ -44,7 +44,7 @@ jobs:
         id: keys
         run: |
           echo "branch_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "bucket=$(( $(date -u +%s) / 86400 / 80 ))" >> "$GITHUB_OUTPUT"
+          echo "bucket=$(( $(date -u +%s) / 86400 / 6 ))" >> "$GITHUB_OUTPUT"
           if [ "${{ matrix.variant }}" = "latest" ]; then
             echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
           fi
@@ -104,6 +104,7 @@ jobs:
         id: vertag
         run: |
           SHORT=$(git show origin/main-fork:.github/branch-tags.json | jq -r --arg b "${{ matrix.branch }}" '.[$b] // $b')
+          echo "short=${SHORT}" >> "$GITHUB_OUTPUT"
           echo "tag=${SHORT}-${{ matrix.variant }}" >> "$GITHUB_OUTPUT"
 
       - name: Install PlatformIO Core
@@ -129,9 +130,32 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.branch }}-${{ matrix.variant }}-${{ steps.treehash.outputs.hash }}-firmware
-          retention-days: 90
+          retention-days: 7
           path: |
             .pio/build-check/ratgdo_esp32dev/firmware.bin
+            .pio/build-check/ratgdo_esp32dev/firmware.elf
+
+      - name: Publish rolling pre-release
+        # Only the pinned variant gets published - it's the one that's an actual,
+        # inspectable git ref (the branch tip), unlike "latest" which is a scratch
+        # merge that's never committed anywhere. Re-publishing under the same tag
+        # each time (rather than accumulating one release per run) keeps this a
+        # single stable download URL per branch, and avoids the short artifact
+        # expiry for anyone testing builds from outside this fork.
+        if: matrix.variant == 'pinned' && steps.build.outputs.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.vertag.outputs.short }}"
+          SHA="${{ steps.keys.outputs.branch_sha }}"
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag -y || true
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease \
+            --target "$SHA" \
+            --title "${{ matrix.branch }} (unofficial test build)" \
+            --notes "Automated test build from branch \`${{ matrix.branch }}\` @ \`$SHA\`. Unofficial fork build, not affiliated with the upstream ratgdo project - see FORK-NOTES.md for what this branch changes. Rebuilt and replaced automatically as the branch moves; this is not a stable release." \
+            .pio/build-check/ratgdo_esp32dev/firmware.bin \
             .pio/build-check/ratgdo_esp32dev/firmware.elf
 
       - name: Mark verified
@@ -150,7 +174,7 @@ jobs:
           {
             if [ "${{ steps.sha_cache.outputs.cache-hit }}" = "true" ] && [ "${{ steps.time_cache.outputs.cache-hit }}" = "true" ]; then
               echo "### SKIPPED: \`$BRANCH\` ($VARIANT)"
-              echo "No changes since the last verified build, and still within the 90-day artifact refresh window. Nothing rebuilt."
+              echo "No changes since the last verified build, and still within the 6-day artifact refresh window. Nothing rebuilt."
             elif [ "$VARIANT" = "latest" ] && [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
               echo "### WARNING: \`$BRANCH\` ($VARIANT) merge conflict"
               echo "Scratch merge of upstream/main into \`$BRANCH\` no longer applies cleanly. Manual rebase needed."
@@ -162,9 +186,9 @@ jobs:
             else
               echo "### OK: \`$BRANCH\` ($VARIANT)"
               if [ "$VARIANT" = "pinned" ]; then
-                echo "Builds successfully as-is (no upstream merge, exactly what's pushed to the branch). Firmware artifact uploaded (90-day retention)."
+                echo "Builds successfully as-is (no upstream merge, exactly what's pushed to the branch). Firmware artifact uploaded (7-day retention) and published to the [${{ steps.vertag.outputs.short }} release](https://github.com/$GITHUB_REPOSITORY/releases/tag/${{ steps.vertag.outputs.short }})."
               else
-                echo "Merges cleanly with upstream/main and builds successfully. Firmware artifact uploaded (90-day retention)."
+                echo "Merges cleanly with upstream/main and builds successfully. Firmware artifact uploaded (7-day retention)."
               fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"

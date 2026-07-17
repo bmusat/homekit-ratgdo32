@@ -61,10 +61,21 @@ three at once.
   independent schedule). Dry-run merges the latest upstream into each fix branch (scratch
   only, never pushed) and builds both a `pinned` (as-pushed) and `latest` (merged with
   upstream) variant via PlatformIO. Skips rebuilding when the exact code combination was
-  already verified and the artifact is still fresh (90-day cap). Result is written to the
+  already verified and the artifact is still fresh (7-day cap). Result is written to the
   run's job summary, and a merge conflict or build failure now fails the job rather than
   just warning. Artifact names include a short hash of the exact source tree built, so
   `pinned` and `latest` show the same hash whenever a branch is fully caught up with upstream.
+  On a successful `pinned` build, also publishes/replaces a rolling GitHub pre-release
+  tagged with the branch's short name (e.g. `laser-fix`), so anyone outside this fork can
+  grab a build without digging through Actions runs — Actions artifacts are kept short-lived
+  (7 days) purely as an internal CI/download convenience now that Releases cover the
+  durable, public-facing copy. Only `pinned` is published, since `latest` is a scratch merge
+  that's never committed anywhere and isn't tied to a reproducible ref.
+- `cleanup-branch-release.yml` — fires on GitHub's `delete` branch event. Looks up the
+  deleted branch's short name in `branch-tags.json` and deletes the matching pre-release
+  (if any), so a merged/abandoned branch's release doesn't linger forever. Delete the
+  branch first, then remove its `branch-tags.json` entry afterward in a separate commit —
+  in the other order this lookup finds nothing and the release cleanup is skipped.
 
 ## Tools
 
