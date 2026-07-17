@@ -19,21 +19,31 @@ below in the Tools section) and the CI automation below.
 - **[`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync)** — Branched on top of
   `laser-on-door-open`, adds one more commit: fixes HomeKit not reflecting laser state changes
   that originate from firmware (door-open trigger, vehicle-arrival trigger, or the auto-off
-  timer) instead of a manual toggle. Kept as a separate branch/PR so the timing fix and the
-  HomeKit-sync fix can be reviewed and merged independently.
+  timer) instead of a manual toggle. Kept as a separate branch on top so the timing fix and
+  the HomeKit-sync fix stay as distinct, individually reviewable commits. Current plan is to
+  submit both together as one combined upstream PR once this branch has had a stability
+  burn-in on hardware.
 - **[`lock-state-crosstalk`](../../tree/lock-state-crosstalk)** — Fixes the "Remotes" toggle
   silently flipping on its own — root-caused via ~5 days of syslog capture to
   `DEV_GarageDoor::update()` acting on both the door and lock characteristics on every HomeKit
   write to the service, instead of only the one actually changed. Opening/closing the door
-  could silently re-send whatever the lock was last set to.
+  could silently re-send whatever the lock was last set to. Rebased on top of
+  `laser-fix-hk-sync` (not `upstream/main` directly) so it can become its own separate,
+  later PR without being tangled up in the laser work. Not yet flashed to hardware —
+  waiting on the `laser-fix-hk-sync` burn-in above before doing a real before/after
+  comparison.
 
 | Branch | Based on | Status |
 |---|---|---|
 | [`laser-on-door-open`](../../tree/laser-on-door-open) | `v3.5.0-7-gcdf0708` (current `upstream/main`) | Fully caught up |
-| [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 1 commit | Fully caught up |
-| [`lock-state-crosstalk`](../../tree/lock-state-crosstalk) | `v3.5.0-7-gcdf0708` (current `upstream/main`) | Fully caught up |
+| [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 1 commit | Fully caught up; running on hardware |
+| [`lock-state-crosstalk`](../../tree/lock-state-crosstalk) | `laser-fix-hk-sync` + 1 commit | Fully caught up; not yet flashed |
 
-Status: local testing in progress; intended as separate pull requests to upstream once validated.
+Status: `laser-fix-hk-sync` is currently running on hardware for a stability burn-in.
+`lock-state-crosstalk` is staged on top and ready, but deliberately held back until that
+burn-in looks solid. Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one combined
+upstream PR first, then `lock-state-crosstalk` as its own separate PR afterward — not all
+three at once.
 
 ### Deleted branches (historical)
 
