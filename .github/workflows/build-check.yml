@@ -11,7 +11,7 @@ env:
   # Bump this whenever a workflow change should force a rebuild even though
   # the branch/upstream SHAs haven't changed (the cache keys don't otherwise
   # know the pipeline itself changed).
-  CACHE_EPOCH: "4"
+  CACHE_EPOCH: "5"
 
 jobs:
   build-check:
