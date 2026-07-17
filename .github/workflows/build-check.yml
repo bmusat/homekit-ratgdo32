@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [laser-on-door-open, laser-fix-hk-sync, lock-state-crosstalk]
+        branch: [laser-on-door-open, laser-fix-hk-sync, lock-state-crosstalk, test-release-mechanism]
         variant: [pinned, latest]
     steps:
       - uses: actions/checkout@v7

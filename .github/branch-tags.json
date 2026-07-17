@@ -1,5 +1,6 @@
 {
   "laser-on-door-open": "laser-fix",
   "laser-fix-hk-sync": "laser-hk-fix",
-  "lock-state-crosstalk": "lock-xtalk"
+  "lock-state-crosstalk": "lock-xtalk",
+  "test-release-mechanism": "test-release"
 }
