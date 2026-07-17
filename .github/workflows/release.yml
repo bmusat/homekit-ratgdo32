@@ -9,6 +9,12 @@ permissions:
 
 jobs:
   release:
+    # Inherited from upstream via main's mirror - its steps hardcode
+    # ratgdo/homekit-ratgdo32 URLs and a Discord webhook secret that only
+    # exist on the real upstream repo, so it fails on every release
+    # published here on the fork. Guard it to a no-op (shows as skipped,
+    # not failed) rather than letting it run and error out.
+    if: github.repository == 'ratgdo/homekit-ratgdo32'
     permissions:
       contents: write
     runs-on: ubuntu-latest
