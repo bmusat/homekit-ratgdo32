@@ -49,11 +49,10 @@ three at once.
 
 Each active fix branch above gets a rolling pre-release build published automatically
 whenever `build-check.yml` succeeds (see Automation below) — grab one from the
-[Releases page](../../releases) to try a branch without setting up a PlatformIO build
-environment yourself. These are unofficial, unvetted test builds from a personal fork,
-not affiliated with the upstream ratgdo project — use at your own risk. GitHub won't
-link to this page on its own since every release here is marked pre-release, so this
-is the way to find them.
+[Releases page](../../releases) (also linked in the sidebar) to try a branch without
+setting up a PlatformIO build environment yourself. These are unofficial, unvetted test
+builds from a personal fork, not affiliated with the upstream ratgdo project — use at
+your own risk.
 
 ### Deleted branches (historical)
 
