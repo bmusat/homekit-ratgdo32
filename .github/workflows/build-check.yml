@@ -154,13 +154,27 @@ jobs:
           # comparison against what's actually flashed.
           BUILD_VERSION=$(jq -r '.version' docs/manifest.json | sed 's/^v//')
           FULL_VERSION="${BUILD_VERSION}-${{ steps.vertag.outputs.tag }}"
+
+          cat > /tmp/release-notes.md <<EOF
+          Firmware version: \`$FULL_VERSION\`
+
+          Branch: \`${{ matrix.branch }}\` @ \`$SHA\`
+
+          See FORK-NOTES.md for what this branch changes.
+
+          > [!WARNING]
+          > Unofficial, unvetted test build from a personal fork - not affiliated with the upstream ratgdo project. Use at your own risk.
+
+          Rebuilt and replaced automatically as the branch moves; not a stable release.
+          EOF
+
           gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag -y || true
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --prerelease \
             --target "$SHA" \
-            --title "${{ matrix.branch }} — v${FULL_VERSION}" \
-            --notes "Firmware version: \`$FULL_VERSION\` - matches exactly what the device's status page/logs report after flashing, so you can confirm what's running. Automated test build from branch \`${{ matrix.branch }}\` @ \`$SHA\`. Unofficial fork build, not affiliated with the upstream ratgdo project - see FORK-NOTES.md for what this branch changes. Rebuilt and replaced automatically as the branch moves; this is not a stable release." \
+            --title "${{ matrix.branch }}" \
+            --notes-file /tmp/release-notes.md \
             .pio/build-check/ratgdo_esp32dev/firmware.bin \
             .pio/build-check/ratgdo_esp32dev/firmware.elf
 
