@@ -148,13 +148,19 @@ jobs:
         run: |
           TAG="${{ steps.vertag.outputs.short }}"
           SHA="${{ steps.keys.outputs.branch_sha }}"
+          # Matches exactly what the device itself reports as "Firmware version:"
+          # (see auto_firmware_version.py) - manifest.json's version, minus the
+          # leading v, plus the VERSION_TAG build flag - so it's a direct copy-paste
+          # comparison against what's actually flashed.
+          BUILD_VERSION=$(jq -r '.version' docs/manifest.json | sed 's/^v//')
+          FULL_VERSION="${BUILD_VERSION}-${{ steps.vertag.outputs.tag }}"
           gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag -y || true
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --prerelease \
             --target "$SHA" \
-            --title "${{ matrix.branch }} (unofficial test build)" \
-            --notes "Automated test build from branch \`${{ matrix.branch }}\` @ \`$SHA\`. Unofficial fork build, not affiliated with the upstream ratgdo project - see FORK-NOTES.md for what this branch changes. Rebuilt and replaced automatically as the branch moves; this is not a stable release." \
+            --title "${{ matrix.branch }} — v${FULL_VERSION}" \
+            --notes "Firmware version: \`$FULL_VERSION\` - matches exactly what the device's status page/logs report after flashing, so you can confirm what's running. Automated test build from branch \`${{ matrix.branch }}\` @ \`$SHA\`. Unofficial fork build, not affiliated with the upstream ratgdo project - see FORK-NOTES.md for what this branch changes. Rebuilt and replaced automatically as the branch moves; this is not a stable release." \
             .pio/build-check/ratgdo_esp32dev/firmware.bin \
             .pio/build-check/ratgdo_esp32dev/firmware.elf
 

@@ -80,7 +80,10 @@ is the way to find them.
   grab a build without digging through Actions runs — Actions artifacts are kept short-lived
   (7 days) purely as an internal CI/download convenience now that Releases cover the
   durable, public-facing copy. Only `pinned` is published, since `latest` is a scratch merge
-  that's never committed anywhere and isn't tied to a reproducible ref.
+  that's never committed anywhere and isn't tied to a reproducible ref. The release title and
+  notes include the exact firmware version string (e.g. `3.5.0-laser-hk-fix-pinned`) - the
+  same one the device itself reports as `Firmware version:` after flashing - so you can
+  directly confirm a release matches what's currently running.
 - `cleanup-branch-release.yml` — fires on GitHub's `delete` branch event. Looks up the
   deleted branch's short name in `branch-tags.json` and deletes the matching pre-release
   (if any), so a merged/abandoned branch's release doesn't linger forever. Delete the
