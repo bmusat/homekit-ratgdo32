@@ -45,6 +45,16 @@ burn-in looks solid. Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one com
 upstream PR first, then `lock-state-crosstalk` as its own separate PR afterward — not all
 three at once.
 
+## Test builds
+
+Each active fix branch above gets a rolling pre-release build published automatically
+whenever `build-check.yml` succeeds (see Automation below) — grab one from the
+[Releases page](../../releases) to try a branch without setting up a PlatformIO build
+environment yourself. These are unofficial, unvetted test builds from a personal fork,
+not affiliated with the upstream ratgdo project — use at your own risk. GitHub won't
+link to this page on its own since every release here is marked pre-release, so this
+is the way to find them.
+
 ### Deleted branches (historical)
 
 - ~~`lock-toggle-dedup`~~ — deleted 2026-07-15. Theorized (2026-07-07, against `v3.4.6`) that
