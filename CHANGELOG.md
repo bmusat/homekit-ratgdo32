@@ -4,7 +4,7 @@
 
 All notable changes to `homekit-ratgdo32` will be documented in this file. This project tries to adhere to [Semantic Versioning](http://semver.org/).
 
-## v3.5.1 (2026-07-??)
+## v3.5.1 (2026-07-22)
 
 ### What's Changed
 
