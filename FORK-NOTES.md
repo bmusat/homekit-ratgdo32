@@ -35,7 +35,7 @@ below in the Tools section) and the CI automation below.
 
 | Branch | Based on | Status |
 |---|---|---|
-| [`laser-on-door-open`](../../tree/laser-on-door-open) | `v3.5.0-7-gcdf0708` (current `upstream/main`) | Fully caught up |
+| [`laser-on-door-open`](../../tree/laser-on-door-open) | `v3.5.1-6-g374ed1f` (current `upstream/main`) | Fully caught up |
 | [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 1 commit | Fully caught up; running on hardware |
 | [`lock-state-crosstalk`](../../tree/lock-state-crosstalk) | `laser-fix-hk-sync` + 1 commit | Fully caught up; not yet flashed |
 
