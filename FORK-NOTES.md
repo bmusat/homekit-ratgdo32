@@ -29,9 +29,14 @@ below in the Tools section) and the CI automation below.
   write to the service, instead of only the one actually changed. Opening/closing the door
   could silently re-send whatever the lock was last set to. Rebased on top of
   `laser-fix-hk-sync` (not `upstream/main` directly) so it can become its own separate,
-  later PR without being tangled up in the laser work. Not yet flashed to hardware —
-  waiting on the `laser-fix-hk-sync` burn-in above before doing a real before/after
-  comparison.
+  later PR without being tangled up in the laser work. Not yet flashed to hardware.
+  Since staging this fix, the "Remotes" flip hasn't recurred at all on `laser-fix-hk-sync`
+  (unfixed) despite regular Apple Home door use — so there's currently no direct evidence
+  the fix is needed day-to-day, only the original syslog-based root-cause analysis.
+  Deliberately held back from flashing until a fresh occurrence gives a real before/after
+  comparison to confirm against; not comfortable flashing a change on a plausible-but-
+  unverifiable theory (the leading explanation for the current quiet spell involves timing
+  behavior on Apple's side that can't be directly inspected).
 
 | Branch | Based on | Status |
 |---|---|---|
@@ -40,10 +45,10 @@ below in the Tools section) and the CI automation below.
 | [`lock-state-crosstalk`](../../tree/lock-state-crosstalk) | `laser-fix-hk-sync` + 1 commit | Fully caught up; not yet flashed |
 
 Status: `laser-fix-hk-sync` is currently running on hardware for a stability burn-in.
-`lock-state-crosstalk` is staged on top and ready, but deliberately held back until that
-burn-in looks solid. Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one combined
-upstream PR first, then `lock-state-crosstalk` as its own separate PR afterward — not all
-three at once.
+`lock-state-crosstalk` is staged on top and ready, but held in the backlog until the
+"Remotes" flip recurs and gives fresh syslog evidence to confirm against — see note above.
+Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one combined upstream PR first, then
+`lock-state-crosstalk` as its own separate PR once there's evidence to justify flashing it.
 
 ## Test builds
 
