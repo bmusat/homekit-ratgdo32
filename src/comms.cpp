@@ -21,6 +21,7 @@
 // RATGDO project includes
 #include "ratgdo.h"
 #include "homekit.h"
+#include "encoder.h"
 #include "config.h"
 #include "comms.h"
 #include "led.h"
@@ -438,7 +439,12 @@ static void gdo_event_handler(const gdo_status_t *status, gdo_cb_event_t event, 
         garage_door.active = true;
         if ((garage_door.current_state != gdo_to_homekit_door_current_state[status->door]) && (status->door != GDO_DOOR_STATE_UNKNOWN))
         {
+#ifdef RATGDO_ENCODER
+            protocol_received_state(gdo_to_homekit_door_current_state[status->door]);
+#else
             notify_homekit_current_door_state_change(gdo_to_homekit_door_current_state[status->door]);
+            garage_door.current_state = gdo_to_homekit_door_current_state[status->door];
+#endif
             notify_homekit_target_door_state_change(gdo_to_homekit_door_target_state[status->door]);
 
             // If we are using Sec+2.0 built-in time-to-close then reset the TTC to zero when door is closed
@@ -956,6 +962,18 @@ void wallPlate_Emulation()
     }
 }
 
+inline void handle_protocol_door_state(GarageDoorCurrentState state)
+{
+#ifdef RATGDO_ENCODER
+    if (encoder_enabled)
+    {
+        protocol_received_state(state);
+        return;
+    }
+#endif
+    update_door_state(state);
+}
+
 void update_door_state(GarageDoorCurrentState current_state)
 {
     static _millis_t start_opening = 0;
@@ -1121,14 +1139,12 @@ void update_door_state(GarageDoorCurrentState current_state)
     }
 
     // Inform HomeKit if there is a change in door state.
-    if ((target_state != garage_door.target_state) ||
-        (current_state != garage_door.current_state))
+    if ((target_state != garage_door.target_state) || (current_state != garage_door.current_state))
     {
         ESP_LOGI(TAG, "Door state changing from %s to %s (target %s) (%s)", DOOR_STATE(garage_door.current_state), DOOR_STATE(current_state), DOOR_STATE(target_state), timeString());
         notify_homekit_current_door_state_change(current_state);
         notify_homekit_target_door_state_change(target_state);
     }
-
     // Update the global
     doorState = current_state;
 }
@@ -1351,7 +1367,7 @@ void sec1_process_message(uint8_t key, uint8_t value = 0xFF)
             current_state = (GarageDoorCurrentState)0xFF;
             break;
         }
-        update_door_state(current_state);
+        handle_protocol_door_state(current_state);
 
         if (!comms_status_done)
         {
@@ -1789,7 +1805,7 @@ void comms_loop_sec2()
                 current_state = (GarageDoorCurrentState)0xFF;
                 break;
             }
-            update_door_state(current_state);
+            handle_protocol_door_state(current_state);
 
             if (pkt.m_data.value.status.light != garage_door.light)
             {
@@ -1862,12 +1878,12 @@ void comms_loop_sec2()
             case GarageDoorCurrentState::CURR_OPEN:
                 // If last known state was open, then we missed that packet and should be in closing state.
                 ESP_LOGI(TAG, "Door moving from OPEN state but we missed the notification packet. Update our state to CLOSING");
-                update_door_state(GarageDoorCurrentState::CURR_CLOSING);
+                handle_protocol_door_state(GarageDoorCurrentState::CURR_CLOSING);
                 break;
             case GarageDoorCurrentState::CURR_CLOSED:
                 // If last known state was open, then we missed that packet and should be in closing state.
                 ESP_LOGI(TAG, "Door moving from CLOSED state but we missed the notification packet. Update our state to OPENING");
-                update_door_state(GarageDoorCurrentState::CURR_OPENING);
+                handle_protocol_door_state(GarageDoorCurrentState::CURR_OPENING);
                 break;
             default:
                 break;
@@ -2177,10 +2193,12 @@ void comms_loop_sec2()
             // Typically occurs if there is a fail-to-decode packet error.  This could be a regular status update.
             // If it has been more than 5 minutes since the last status packet then request GDO to resend one, or
             // if we are in the middle of an open or close sequence as we might have missed the state change to open or closed.
+            // Similarly if we are waiting for a light or lock state change to be reflected in a status packet, we may have missed it.
             if (_millis() - lastStatusPkt > (5 * 60 * 1000) ||
                 lastStatusPkt == 0 ||
                 garage_door.current_state == GarageDoorCurrentState::CURR_OPENING ||
-                garage_door.current_state == GarageDoorCurrentState::CURR_CLOSING)
+                garage_door.current_state == GarageDoorCurrentState::CURR_CLOSING ||
+                pendingDoorCommand || pendingLightOn || pendingLightOff || pendingLockOn || pendingLockOff)
             {
                 ESP_LOGD(TAG, "Possibly missed a status packet, requesting GDO to resend");
                 send_get_status();
@@ -2233,7 +2251,7 @@ void comms_loop_drycontact()
     if (doorState != previousDoorState)
     {
         previousDoorState = doorState;
-        update_door_state(doorState);
+        handle_protocol_door_state(doorState);
     }
 }
 #endif
@@ -2692,7 +2710,7 @@ GarageDoorCurrentState open_door()
         return GarageDoorCurrentState::CURR_STOPPED;
     }
 #ifdef RATGDO_ENCODER
-    if (doorControlType == 3 && userConfig->getEncoderEnabled())
+    if (encoder_enabled)
         encoder_set_intended_open();
 #endif
     door_command_open();
@@ -2878,7 +2896,7 @@ GarageDoorCurrentState close_door(bool bypass_ttc)
         }
         ESP_LOGD(TAG, "Closing door");
 #ifdef RATGDO_ENCODER
-        if (doorControlType == 3 && userConfig->getEncoderEnabled())
+        if (encoder_enabled)
             encoder_set_intended_close();
 #endif
         door_command_close();
