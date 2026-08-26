@@ -62,7 +62,7 @@ When you first add the device to HomeKit a number of accessories are added:
 - Vehicle departing _motion_ sensor. Only on ratgdo32-disco boards, triggers motion if it detects departure of a vehicle.
 - Vehicle presence _occupancy_ sensor. Only on ratgdo32-disco boards, set if the distance sensor detects presence of a vehicle.
 - Parking assist laser _light switch_. Only on ratgdo32-disco boards.
-- _contact_ sensor. Only when rotary encoder enabled, triggers open condition when door manually operated.
+- _contact_ sensor. Only when rotary encoder enable on ratgdo32 boards, triggers open condition when door manually operated
 
 Vehicle arrival and departing sensors are only triggered if vehicle motion is detected within 5 minutes of door opening or closing. The parking assist laser is activated when vehicle arrival is detected.
 
@@ -238,8 +238,7 @@ for this when setting the value.
 
 #### Laser _(ratgdo32-disco boards only)_
 
-For ratgdo32-disco boards, if you have the parking assist [laser accessory](https://ratcloud.llc/products/parking-assistance-laser) installed, select this option to enable support and optionally add HomeKit light switch accessory
-to allow for manual or HomeKit automation control.
+For ratgdo32-disco boards, if you have the parking assist [laser accessory](https://ratcloud.llc/products/parking-assistance-laser) installed, select this option to enable support and optionally add HomeKit light switch accessory to allow for manual or HomeKit automation control.
 
 When enabled, you can configure how long the laser remains on during parking assist by selecting a value from zero to 300 seconds (5 minutes). Selecting
 zero disables parking assist laser. Parking assist is triggered if an arriving vehicle is detected with 5 minutes of the door opening or closing.
