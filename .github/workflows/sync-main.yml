@@ -91,5 +91,6 @@ jobs:
             {
               echo "### OK"
               echo "main fast-forwarded to upstream/main (tags included), and main-fork merged cleanly."
+              echo "Triggered [build-check.yml](https://github.com/$GITHUB_REPOSITORY/actions/workflows/build-check.yml) on \`main-fork\`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
