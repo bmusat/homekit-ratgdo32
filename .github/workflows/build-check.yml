@@ -214,7 +214,7 @@ jobs:
             if [ "${{ steps.sha_cache.outputs.cache-hit }}" = "true" ] && [ "${{ steps.time_cache.outputs.cache-hit }}" = "true" ]; then
               echo "### SKIPPED: \`$BRANCH\` ($VARIANT)"
               echo "No changes since the last verified build, and still within the 6-day artifact refresh window. Nothing rebuilt."
-              [ -n "$STALENESS" ] && echo "$STALENESS"
+              if [ -n "$STALENESS" ]; then echo "$STALENESS"; fi
             elif [ "$VARIANT" = "latest" ] && [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
               echo "### WARNING: \`$BRANCH\` ($VARIANT) merge conflict"
               echo "Scratch merge of upstream/main into \`$BRANCH\` no longer applies cleanly. Manual rebase needed."
