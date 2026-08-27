@@ -35,7 +35,10 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
 
       - name: Fetch upstream
-        if: matrix.variant == 'latest'
+        # Fetched for both variants now - "latest" needs it to scratch-merge,
+        # "pinned" needs it purely to report how far behind upstream the
+        # branch tip is (see "Compute pinned staleness" below). Never affects
+        # the pinned build itself or its cache key.
         run: |
           git remote add upstream "$UPSTREAM_REPO"
           git fetch upstream main
@@ -48,6 +51,18 @@ jobs:
           if [ "${{ matrix.variant }}" = "latest" ]; then
             echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Compute pinned staleness vs upstream
+        # Informational only - purely for the job summary below, so it can answer
+        # "is this release actually current, or just untouched?" without needing
+        # to run git commands by hand. Deliberately kept out of any cache key:
+        # a rebuild should never be triggered just because upstream moved, only
+        # because the branch's own pushed content changed.
+        id: staleness
+        if: matrix.variant == 'pinned'
+        run: |
+          echo "commits_behind=$(git rev-list --count HEAD..upstream/main)" >> "$GITHUB_OUTPUT"
+          echo "commit_age_days=$(( ( $(date -u +%s) - $(git log -1 --format=%ct HEAD) ) / 86400 ))" >> "$GITHUB_OUTPUT"
 
       - name: Check if this exact combination was already verified
         id: sha_cache
@@ -191,10 +206,15 @@ jobs:
         run: |
           BRANCH="${{ matrix.branch }}"
           VARIANT="${{ matrix.variant }}"
+          STALENESS=""
+          if [ "$VARIANT" = "pinned" ]; then
+            STALENESS="Branch tip is ${{ steps.staleness.outputs.commits_behind }} commit(s) behind \`upstream/main\`, last committed ${{ steps.staleness.outputs.commit_age_days }} day(s) ago."
+          fi
           {
             if [ "${{ steps.sha_cache.outputs.cache-hit }}" = "true" ] && [ "${{ steps.time_cache.outputs.cache-hit }}" = "true" ]; then
               echo "### SKIPPED: \`$BRANCH\` ($VARIANT)"
               echo "No changes since the last verified build, and still within the 6-day artifact refresh window. Nothing rebuilt."
+              [ -n "$STALENESS" ] && echo "$STALENESS"
             elif [ "$VARIANT" = "latest" ] && [ "${{ steps.merge.outputs.conflict }}" = "true" ]; then
               echo "### WARNING: \`$BRANCH\` ($VARIANT) merge conflict"
               echo "Scratch merge of upstream/main into \`$BRANCH\` no longer applies cleanly. Manual rebase needed."
@@ -207,6 +227,7 @@ jobs:
               echo "### OK: \`$BRANCH\` ($VARIANT)"
               if [ "$VARIANT" = "pinned" ]; then
                 echo "Builds successfully as-is (no upstream merge, exactly what's pushed to the branch). Firmware artifact uploaded (7-day retention) and published to the [${{ steps.vertag.outputs.short }} release](https://github.com/$GITHUB_REPOSITORY/releases/tag/${{ steps.vertag.outputs.short }})."
+                echo "$STALENESS"
               else
                 echo "Merges cleanly with upstream/main and builds successfully. Firmware artifact uploaded (7-day retention)."
               fi
