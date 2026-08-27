@@ -4,7 +4,7 @@
 
 This is my fork of [ratgdo/homekit-ratgdo32](https://github.com/ratgdo/homekit-ratgdo32),
 maintained to develop and test personal bug fixes before submitting them upstream.  Currently
-there are three branches tracked here.
+there are two branches tracked here.
 
 `main` is kept as an untouched, byte-for-byte mirror of upstream `main` which is always safe to
 fast-forward. This branch (`main-fork`) is the default branch and it carries the same source
@@ -23,32 +23,15 @@ below in the Tools section) and the CI automation below.
   the HomeKit-sync fix stay as distinct, individually reviewable commits. Current plan is to
   submit both together as one combined upstream PR once this branch has had a stability
   burn-in on hardware.
-- **[`lock-state-crosstalk`](../../tree/lock-state-crosstalk)** — Fixes the "Remotes" toggle
-  silently flipping on its own — root-caused via ~5 days of syslog capture to
-  `DEV_GarageDoor::update()` acting on both the door and lock characteristics on every HomeKit
-  write to the service, instead of only the one actually changed. Opening/closing the door
-  could silently re-send whatever the lock was last set to. Rebased on top of
-  `laser-fix-hk-sync` (not `upstream/main` directly) so it can become its own separate,
-  later PR without being tangled up in the laser work. Not yet flashed to hardware.
-  Since staging this fix, the "Remotes" flip hasn't recurred at all on `laser-fix-hk-sync`
-  (unfixed) despite regular Apple Home door use — so there's currently no direct evidence
-  the fix is needed day-to-day, only the original syslog-based root-cause analysis.
-  Deliberately held back from flashing until a fresh occurrence gives a real before/after
-  comparison to confirm against; not comfortable flashing a change on a plausible-but-
-  unverifiable theory (the leading explanation for the current quiet spell involves timing
-  behavior on Apple's side that can't be directly inspected).
 
 | Branch | Based on | Status |
 |---|---|---|
 | [`laser-on-door-open`](../../tree/laser-on-door-open) | `v3.5.1-6-g374ed1f` (current `upstream/main`) | Fully caught up |
 | [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 1 commit | Fully caught up; running on hardware |
-| [`lock-state-crosstalk`](../../tree/lock-state-crosstalk) | `laser-fix-hk-sync` + 1 commit | Fully caught up; not yet flashed |
 
 Status: `laser-fix-hk-sync` is currently running on hardware for a stability burn-in.
-`lock-state-crosstalk` is staged on top and ready, but held in the backlog until the
-"Remotes" flip recurs and gives fresh syslog evidence to confirm against — see note above.
-Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one combined upstream PR first, then
-`lock-state-crosstalk` as its own separate PR once there's evidence to justify flashing it.
+Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one combined upstream PR once burn-in
+looks solid.
 
 ## Test builds
 
@@ -66,6 +49,17 @@ your own risk.
   wire, and added a guard in `comms.cpp` to drop exact repeat frames. Shelved 2026-07-09 after
   ~5 days of syslog capture found no supporting evidence — every observed flip traced to
   `lock-state-crosstalk`'s root cause instead. Kept here only as a historical note.
+- ~~`lock-state-crosstalk`~~ — deleted 2026-08-26. Root-caused the "Remotes" toggle silently
+  flipping to Enabled during HomeKit door operations (~5 days of syslog capture, 2026-07-10) to
+  `DEV_GarageDoor::update()` acting on both the door and lock characteristics on every HomeKit
+  write instead of only the one actually changed, and fixed it by guarding each with
+  `updated()`. Never flashed to hardware — held back pending a repeatable pattern, since only
+  one confirmed recurrence turned up in the following ~6 weeks of logs. Retired after
+  discovering upstream independently landed the identical fix (commit `49e2884`, credited to a
+  suggestion from @adub86 in [ratgdo/homekit-ratgdo32#190](https://github.com/ratgdo/homekit-ratgdo32/pull/190),
+  2026-08-14) — same two characteristics, same `updated()` guard, same reasoning. `main`/
+  `main-fork` now carries upstream's version, so this branch is redundant, not wrong. Kept here
+  only as a historical note.
 
 ## Automation
 
