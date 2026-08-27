@@ -26,12 +26,20 @@ below in the Tools section) and the CI automation below.
 
 | Branch | Based on | Status |
 |---|---|---|
-| [`laser-on-door-open`](../../tree/laser-on-door-open) | `v3.5.1-6-g374ed1f` (current `upstream/main`) | Fully caught up |
-| [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 1 commit | Fully caught up; running on hardware |
+| [`laser-on-door-open`](../../tree/laser-on-door-open) | `upstream/main` directly | — |
+| [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 1 commit | Running on hardware (burn-in) |
+
+Live staleness for each branch (commits behind `upstream/main`, days since its last commit) is
+reported automatically in every `pinned` job's summary on the
+[build-check.yml Actions page](../../actions/workflows/build-check.yml) — deliberately not
+hand-tracked here anymore, since a number like that goes stale within a day and this note kept
+drifting out of sync with reality.
 
 Status: `laser-fix-hk-sync` is currently running on hardware for a stability burn-in.
 Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one combined upstream PR once burn-in
-looks solid.
+looks solid. As of 2026-08-27, both branches are 48 commits behind `upstream/main` (last
+touched 2026-07-24) — a rebase is due, but deliberately held until after a fresh hardware
+flash confirms the current pinned build is still solid.
 
 ## Test builds
 
@@ -64,7 +72,13 @@ your own risk.
 ## Automation
 
 - `sync-main.yml` — daily, fast-forwards `main` to `upstream/main`, then merges `main` into
-  `main-fork`. On success, triggers `build-check.yml`.
+  `main-fork`. On success, triggers `build-check.yml`, and the job summary now says so
+  explicitly (with a link to the build-check.yml Actions page) rather than leaving that
+  implicit - the trigger step running gave no visible indication otherwise. Fails loudly
+  (rather than silently diverging) if `main` can no longer fast-forward - this means upstream
+  rewrote a commit that's already in our history; fix by resetting `main` to `upstream/main`
+  (force-push, since `main` is meant to carry zero unique content) and re-merging into
+  `main-fork`. Happened twice so far: 2026-07-18 (v3.5.1) and 2026-08-21 (v3.5.2/v3.5.3).
 - `build-check.yml` — runs via the `sync-main.yml` chain above or manual dispatch (no
   independent schedule). Dry-run merges the latest upstream into each fix branch (scratch
   only, never pushed) and builds both a `pinned` (as-pushed) and `latest` (merged with
@@ -81,7 +95,11 @@ your own risk.
   that's never committed anywhere and isn't tied to a reproducible ref. The release title and
   notes include the exact firmware version string (e.g. `3.5.0-laser-hk-fix-pinned`) - the
   same one the device itself reports as `Firmware version:` after flashing - so you can
-  directly confirm a release matches what's currently running.
+  directly confirm a release matches what's currently running. Every `pinned` job's summary
+  (both `OK` and `SKIPPED` outcomes) also reports how many commits behind `upstream/main` the
+  branch tip is and how many days since its last commit, added 2026-08-27 so staleness is
+  visible without running git commands by hand - see "Active fix branches" above for the
+  reasoning on why that number isn't also hand-copied into this file.
 - `cleanup-branch-release.yml` — fires on GitHub's `delete` branch event. Looks up the
   deleted branch's short name in `branch-tags.json` and deletes the matching pre-release
   (if any), so a merged/abandoned branch's release doesn't linger forever. Delete the
