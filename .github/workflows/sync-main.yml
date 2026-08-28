@@ -32,15 +32,27 @@ jobs:
           git remote add upstream "$UPSTREAM_REPO"
           git fetch upstream main --tags
 
-      - name: Fast-forward main to upstream/main
+      - name: Determine latest upstream release tag
+        # Track the latest tagged release, not upstream/main's branch tip. The
+        # maintainer treats the tip as a mutable staging area while a release is
+        # still in progress - repeatedly amending its "Update CHANGELOG.md and
+        # version number" commit as more fixes land, which broke our fast-forward
+        # three times in six weeks (v3.5.1, v3.5.2, v3.5.3). A tag, once pushed,
+        # doesn't move - v3.5.1 and v3.5.2 both remained clean ancestors of
+        # upstream/main throughout, unlike the untagged commits past them.
+        id: latest_tag
+        run: echo "tag=$(git tag -l 'v*' --sort=-v:refname | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Fast-forward main to latest release tag
         id: ff
         run: |
-          if git merge --ff-only upstream/main; then
+          TAG="${{ steps.latest_tag.outputs.tag }}"
+          if git merge --ff-only "$TAG"; then
             echo "status=ok" >> "$GITHUB_OUTPUT"
-            echo "note=main was already up to date or fast-forwarded cleanly" >> "$GITHUB_OUTPUT"
+            echo "note=main was already up to date or fast-forwarded cleanly to $TAG" >> "$GITHUB_OUTPUT"
           else
             echo "status=diverged" >> "$GITHUB_OUTPUT"
-            echo "note=main is not a clean ancestor of upstream/main - manual investigation needed" >> "$GITHUB_OUTPUT"
+            echo "note=main is not a clean ancestor of $TAG - manual investigation needed" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Push main and tags
@@ -75,10 +87,11 @@ jobs:
       - name: Job summary
         if: always()
         run: |
+          TAG="${{ steps.latest_tag.outputs.tag }}"
           if [ "${{ steps.ff.outputs.status }}" != "ok" ]; then
             {
               echo "### WARNING: main did not fast-forward"
-              echo "main is not a clean ancestor of upstream/main - upstream likely rewrote history. Needs manual investigation."
+              echo "main is not a clean ancestor of the latest release tag (\`$TAG\`) - unexpected, since tags shouldn't move. Needs manual investigation."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           elif [ "${{ steps.merge_fork.outputs.status }}" = "conflict" ]; then
@@ -90,7 +103,7 @@ jobs:
           else
             {
               echo "### OK"
-              echo "main fast-forwarded to upstream/main (tags included), and main-fork merged cleanly."
+              echo "main fast-forwarded to \`$TAG\` (tags included), and main-fork merged cleanly."
               echo "Triggered [build-check.yml](https://github.com/$GITHUB_REPOSITORY/actions/workflows/build-check.yml) on \`main-fork\`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
