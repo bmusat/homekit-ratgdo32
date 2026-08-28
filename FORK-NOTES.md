@@ -71,14 +71,19 @@ your own risk.
 
 ## Automation
 
-- `sync-main.yml` — daily, fast-forwards `main` to `upstream/main`, then merges `main` into
-  `main-fork`. On success, triggers `build-check.yml`, and the job summary now says so
-  explicitly (with a link to the build-check.yml Actions page) rather than leaving that
-  implicit - the trigger step running gave no visible indication otherwise. Fails loudly
-  (rather than silently diverging) if `main` can no longer fast-forward - this means upstream
-  rewrote a commit that's already in our history; fix by resetting `main` to `upstream/main`
-  (force-push, since `main` is meant to carry zero unique content) and re-merging into
-  `main-fork`. Happened twice so far: 2026-07-18 (v3.5.1) and 2026-08-21 (v3.5.2/v3.5.3).
+- `sync-main.yml` — daily, fast-forwards `main` to upstream's **latest release tag**
+  (not `upstream/main`'s branch tip, as of 2026-08-28), then merges `main` into `main-fork`.
+  On success, triggers `build-check.yml`, and the job summary now says so explicitly (with a
+  link to the build-check.yml Actions page) rather than leaving that implicit - the trigger
+  step running gave no visible indication otherwise. Switched from tracking the branch tip to
+  tracking tags because upstream's maintainer treats the tip as a mutable staging area while a
+  release is in progress - repeatedly amending its "Update CHANGELOG.md and version number"
+  commit as more fixes land before the release actually ships. That broke our fast-forward
+  three times in six weeks: 2026-07-18 (v3.5.1), 2026-08-21 (v3.5.2), 2026-08-28 (v3.5.3, still
+  in progress at time of writing). Tags don't move once pushed, so this class of failure
+  shouldn't recur - if `main` still can't fast-forward to the latest tag, that's a genuinely
+  unexpected event worth investigating carefully, not the routine "upstream is mid-release"
+  noise from before.
 - `build-check.yml` — runs via the `sync-main.yml` chain above or manual dispatch (no
   independent schedule). Dry-run merges the latest upstream into each fix branch (scratch
   only, never pushed) and builds both a `pinned` (as-pushed) and `latest` (merged with
