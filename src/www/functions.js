@@ -153,6 +153,7 @@ function toggleDCOpenClose(radio) {
     document.getElementById("dcDebounceDuration").disabled = (value != 3);
     document.getElementById("motionMotion").disabled = (value != 2);
     // document.getElementById("encoderEnabled").disabled = (value != 3);
+    document.getElementById("wpDisconnectOnTx").disabled = (value != 1);
     toggleEncoderOptions();
     toggleHardwiredBypassRow();
 }
@@ -416,6 +417,8 @@ function setElementsFromStatus(status) {
                 document.getElementById("dcDebounceDuration").disabled = (value != 3);
                 document.getElementById("motionMotion").disabled = (value != 2);
                 //document.getElementById("encoderEnabled").disabled = (value != 3);
+                document.getElementById("gdoFirmwareRow").style.display = (value == 2) ? "table-row" : "none";
+                document.getElementById("wpDisconnectOnTx").disabled = (value != 1);
                 toggleEncoderOptions();
                 toggleHardwiredBypassRow();
                 break;
@@ -529,6 +532,7 @@ function setElementsFromStatus(status) {
             case "useSWserial":
             case "obstFromStatus":
             case "reverseOnStop":
+            case "wpDisconnectOnTx":
                 document.getElementById(key).checked = value;
                 break;
             case "dcOpenClose":
@@ -1201,6 +1205,8 @@ async function setGDO(...args) {
         // check if authenticated, before post to setgdo, prevents timeout of dialog due to AbortSignal
         loaderElem.style.visibility = "visible";
         if (!await checkAuth(false)) {
+            loaderElem.style.visibility = "hidden";
+            console.warn("Authentication failed in setGDO");
             return false;
         }
         const formData = new FormData();
@@ -1415,6 +1421,7 @@ async function saveSettings() {
     // Encoder settings — only present in dry contact mode on ESP32 firmware
     const encoderEnabled = (document.getElementById("encoderEnabled").checked) ? '1' : '0';
     const encoderReversed = (document.getElementById("encoderReversed").checked) ? '1' : '0';
+    const wpDisconnectOnTx = (document.getElementById("wpDisconnectOnTx").checked) ? '1' : '0';
 
     let assistDuration = Math.max(Math.min(parseInt(document.getElementById("assistDuration").value), 300), 0);
     if (isNaN(assistDuration)) assistDuration = 0;
@@ -1512,6 +1519,7 @@ async function saveSettings() {
         "stopDoorHomeKit", stopDoorHomeKit,
         "encoderEnabled", encoderEnabled,
         "encoderReversed", encoderReversed,
+        "wpDisconnectOnTx", wpDisconnectOnTx,
     );
     if (reboot) {
         countdown(rebootSeconds, "Settings saved, RATGDO device rebooting...&nbsp;");

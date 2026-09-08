@@ -319,6 +319,7 @@ __attribute__((always_inline)) inline bool isRxPending()
 SecPlus2Reader reader;
 uint32_t id_code = 0;
 uint32_t rolling_code = 0;
+char gdoFirmwareVersion[] = "000.000";
 #endif // USE_GDOLIB
 
 uint32_t last_saved_code = 0;
@@ -339,7 +340,7 @@ bool wallPanelBooting = false;
 bool wallPanelDetected = false;
 #define WP_CONNECTED LOW
 #define WP_DISCONNECTED HIGH
-uint8_t wallPanelConnected;
+bool wpDisconnectOnTx = false;
 // states
 GarageDoorCurrentState doorState = (GarageDoorCurrentState)0xFF;
 
@@ -455,6 +456,7 @@ static void gdo_event_handler(const gdo_status_t *status, gdo_cb_event_t event, 
 #else
             notify_homekit_current_door_state_change(gdo_to_homekit_door_current_state[status->door]);
             garage_door.current_state = gdo_to_homekit_door_current_state[status->door];
+            digitalWrite(STATUS_DOOR_PIN, garage_door.current_state == GarageDoorCurrentState::CURR_CLOSED ? LOW : HIGH);
 #endif
             notify_homekit_target_door_state_change(gdo_to_homekit_door_target_state[status->door]);
 
@@ -576,6 +578,7 @@ void initialize_gdo_codes(uint32_t id)
     send_get_status();
     send_get_openings();
     send_get_status();
+    send_get_version();
 }
 
 void setup_comms()
@@ -594,18 +597,17 @@ void setup_comms()
     // need to make more space available for initialization.
     txQueueCreate();
 
-    // set to output (not currently used (prob not ported over) using now for new disconnect of wall panel)
     pinMode(STATUS_DOOR_PIN, OUTPUT);
+    digitalWrite(STATUS_DOOR_PIN, LOW); // initial state, LOW == door closed or wall panel connected
 
     if (doorControlType == DOOR_CONTROL_SEC_PLUS_V1)
     {
         ESP_LOGI(TAG, "=== Setting up comms for SECURITY+1.0 protocol");
 
+        wpDisconnectOnTx = userConfig->getWpDisconnectOnTx();
+        ESP_LOGD(TAG, "Sec+ 1.0 digital wall panel disconnect on tx %s", wpDisconnectOnTx ? "enabled through DOOR_STATUS gpio pin" : "disabled");
         // ESP32:GPIO_NUM_26 - ESP8266:GPIO_NUM16(D0)
         // ⁡⁢⁣⁢NC RELAY (AQY412)⁡
-        // enable wall panel
-        wallPanelConnected = WP_CONNECTED;
-        digitalWrite(STATUS_DOOR_PIN, wallPanelConnected);
 
         // set minimum delay between tx bytes
         tx_minimum_delay = SECPLUS1_TX_MINIMUM_DELAY;
@@ -981,8 +983,7 @@ inline void handle_protocol_door_state(GarageDoorCurrentState state)
 #ifdef RATGDO_ENCODER
     if (encoder_enabled)
     {
-        if (doorControlType != DOOR_CONTROL_DRY_CONTACT)
-            protocol_received_state(state);
+        protocol_received_state(state);
         return;
     }
 #endif
@@ -1156,10 +1157,10 @@ void update_door_state(GarageDoorCurrentState current_state)
     {
         ESP_LOGI(TAG, "Door state changing from %s to %s (target %s) (%s)", DOOR_STATE(garage_door.current_state), DOOR_STATE(current_state), DOOR_STATE(target_state), timeString());
         notify_homekit_current_door_state_change(current_state);
+        if (!wpDisconnectOnTx)
+            digitalWrite(STATUS_DOOR_PIN, current_state == GarageDoorCurrentState::CURR_CLOSED ? LOW : HIGH);
         notify_homekit_target_door_state_change(target_state);
     }
-    // Update the global
-    doorState = current_state;
 }
 
 void sec1_process_message(uint8_t key, uint8_t value = 0xFF)
@@ -1186,7 +1187,7 @@ void sec1_process_message(uint8_t key, uint8_t value = 0xFF)
         // but also on release of door button
         ESP_LOGD(TAG, "SEC1 RX 0x31 (door release)");
         // Possible power up of 889LM
-        if (doorState == (GarageDoorCurrentState)0xFF)
+        if (garage_door.current_state == (GarageDoorCurrentState)0xFF)
         {
             wallPanelBooting = true;
         }
@@ -1422,7 +1423,7 @@ void sec1_process_message(uint8_t key, uint8_t value = 0xFF)
                     // Obstruction state changed
                     ESP_LOGD(TAG, "Obstruction: %s (Status packet) (%s)", status_obstructed ? "Obstructed" : "Clear", timeString());
                     notify_homekit_obstruction(status_obstructed);
-                    digitalWrite(STATUS_OBST_PIN, !status_obstructed);
+                    digitalWrite(STATUS_OBST_PIN, status_obstructed);
                 }
                 if (motionTriggers.bit.obstruction && status_motion)
                 {
@@ -1799,6 +1800,13 @@ void comms_loop_sec2()
 
         switch (pkt.m_pkt_cmd)
         {
+        case PacketCommand::FirmwareVersion:
+        {
+            snprintf(gdoFirmwareVersion, sizeof(gdoFirmwareVersion), "%u.%u", pkt.m_data.value.firmware.vMajor, pkt.m_data.value.firmware.vMinor);
+            ESP_LOGI(TAG, "GDO Sec+2.0 firmware version: %s", gdoFirmwareVersion);
+            break;
+        }
+
         case PacketCommand::Status:
         {
             lastStatusPkt = _millis();
@@ -1868,7 +1876,7 @@ void comms_loop_sec2()
                 {
                     ESP_LOGD(TAG, "Obstruction: %s (Status packet) (%s)", status_obstructed ? "Obstructed" : "Clear", timeString());
                     notify_homekit_obstruction(status_obstructed);
-                    digitalWrite(STATUS_OBST_PIN, !status_obstructed);
+                    digitalWrite(STATUS_OBST_PIN, status_obstructed);
                     if (status_obstructed && motionTriggers.bit.obstruction)
                     {
                         notify_homekit_motion(true);
@@ -2168,14 +2176,27 @@ void comms_loop_sec2()
 
         case PacketCommand::Pair2Resp:
         {
-            // Received in confirmation of a SetTtc, whether set by us or someone else.
-            uint16_t secs = pkt.m_data.value.pair2resp.seconds;
-            if (secs > 60 && secs != userConfig->getBuiltInTTC())
+            switch ((Pair2Flags)pkt.m_data.value.pair2resp.flags)
             {
-                ESP_LOGI(TAG, "Update built-in automatic time-to-close to %d seconds", secs);
-                garage_door.builtInTTC = secs;
-                userConfig->set(cfg_builtInTTC, secs);
-                ESP8266_SAVE_CONFIG();
+            case Pair2Flags::LightTimerAck:
+                ESP_LOGI(TAG, "Received LightTimerAck, light timer is %d seconds", pkt.m_data.value.pair2resp.seconds);
+                break;
+            case Pair2Flags::SetTtcAck:
+            {
+                // Received in confirmation of a SetTtc, whether set by us or someone else.
+                uint16_t secs = pkt.m_data.value.pair2resp.seconds;
+                if (secs > 60 && secs != userConfig->getBuiltInTTC())
+                {
+                    ESP_LOGI(TAG, "Update built-in automatic time-to-close to %d seconds", secs);
+                    garage_door.builtInTTC = secs;
+                    userConfig->set(cfg_builtInTTC, secs);
+                    ESP8266_SAVE_CONFIG();
+                }
+                break;
+            }
+            default:
+                ESP_LOGI(TAG, "Unknown Pair2Resp flags: 0x%0X", pkt.m_data.value.pair2resp.flags);
+                break;
             }
             break;
         }
@@ -2187,8 +2208,9 @@ void comms_loop_sec2()
             // 0x01: (has different id_code... from wall panel) when door finished opening (after the Pair3resp 0x02, Pair3 and UpdateTtc)
             // 0x02: when door finished opening and there is a TTC active (after a Pair3 and UpdateTtc)
             // 0x09: in response to a CancelTtc command AND ALSO when obstruction sensor changes from blocked to clear
+            // 0x0A: in resposse to a hold TTC request
             // 0x0B: when TTC expires and door starts warning sequence (and after an UpdateTtc of zero seconds)
-            // 0x0C: at end of warning sequence and door is about to start closing (6-8 seconds after 0x0B received)
+            // 0x0C: at end of warning sequence and door is about to start closing (6-8 seconds after 0x0B received), or release of TTC hold
             // 0x0E: when obstruction sensor changes clear to blocked
             switch ((Pair3State)pkt.m_data.value.pair3resp.byte1)
             {
@@ -2200,6 +2222,8 @@ void comms_loop_sec2()
                 break;
             case Pair3State::WarningStart:
                 // ESP_LOGI(TAG, "Door close warning sequence start");
+                break;
+            case Pair3State::HoldTTC:
                 break;
             case Pair3State::WarningEnd:
                 // ESP_LOGI(TAG, "Door close warning sequence end");
@@ -2369,11 +2393,10 @@ bool transmitSec1(byte toSend)
         // disable RX
         // sw_serial.enableRx(false);
 
-        if (!garage_door.wallPanelEmulated)
+        if (!garage_door.wallPanelEmulated && wpDisconnectOnTx)
         {
             // will reconnect in after tx complete + 5ms
-            wallPanelConnected = WP_DISCONNECTED;
-            digitalWrite(STATUS_DOOR_PIN, wallPanelConnected);
+            digitalWrite(STATUS_DOOR_PIN, WP_DISCONNECTED);
             // ESP_LOGD(TAG, "WP-");
             delay(2);
         }
@@ -2434,12 +2457,11 @@ bool transmitSec1(byte toSend)
         // TODO enable RX if disabled above
         // sw_serial.enableRx(true);
 
-        if (!garage_door.wallPanelEmulated)
+        if (!garage_door.wallPanelEmulated && wpDisconnectOnTx)
         {
             // reconnect after tx complete
             delay(2);
-            wallPanelConnected = WP_CONNECTED;
-            digitalWrite(STATUS_DOOR_PIN, wallPanelConnected);
+            digitalWrite(STATUS_DOOR_PIN, WP_CONNECTED);
             // ESP_LOGD(TAG, "WP+");
             // settle
             delay(2);
@@ -2629,6 +2651,8 @@ void door_command_close()
                                        ESP_LOGW(TAG, "Door did not close in expected time, assuming it is closed");
                                        pendingDoorCommand = false;
                                        notify_homekit_current_door_state_change(GarageDoorCurrentState::CURR_CLOSED);
+                                       if (!wpDisconnectOnTx)
+                                           digitalWrite(STATUS_DOOR_PIN, LOW);
                                        notify_homekit_target_door_state_change(GarageDoorTargetState::TGT_CLOSED);
                                        send_get_status(); // query in case we're wrong and it's stopped (Sec+2.0)
                                    });
@@ -2642,7 +2666,9 @@ void door_command_close()
                                 checkDoorCompleted.detach();
                                 pendingDoorCommand = false;
                                 ESP_LOGE(TAG, "Door is supposed to be closing but is not.  Current state: %s", DOOR_STATE(garage_door.current_state));
-                                notify_homekit_current_door_state_change(garage_door.current_state); });
+                                notify_homekit_current_door_state_change(garage_door.current_state);
+                                if (!wpDisconnectOnTx)
+                                    digitalWrite(STATUS_DOOR_PIN, garage_door.current_state == GarageDoorCurrentState::CURR_CLOSED ? LOW : HIGH); });
 #endif
     return;
 }
@@ -2674,6 +2700,8 @@ void door_command_open()
                                        ESP_LOGW(TAG, "Door did not open in expected time, assuming it is open");
                                        pendingDoorCommand = false;
                                        notify_homekit_current_door_state_change(GarageDoorCurrentState::CURR_OPEN);
+                                       if (!wpDisconnectOnTx)
+                                           digitalWrite(STATUS_DOOR_PIN, HIGH);
                                        notify_homekit_target_door_state_change(GarageDoorTargetState::TGT_OPEN);
                                        send_get_status(); // query in case we're wrong and it's stopped (Sec+2.0)
                                    });
@@ -2687,7 +2715,9 @@ void door_command_open()
                                 checkDoorCompleted.detach();
                                 pendingDoorCommand = false;
                                 ESP_LOGE(TAG, "Door is supposed to be opening but is not.  Current state: %s", DOOR_STATE(garage_door.current_state));
-                                notify_homekit_current_door_state_change(garage_door.current_state); });
+                                notify_homekit_current_door_state_change(garage_door.current_state);
+                                if (!wpDisconnectOnTx)
+                                    digitalWrite(STATUS_DOOR_PIN, garage_door.current_state == GarageDoorCurrentState::CURR_CLOSED ? LOW : HIGH); });
 #endif
     return;
 }
@@ -3069,6 +3099,22 @@ GarageDoorCurrentState toggle_door(bool bypass_ttc)
 #endif
 
 #ifndef USE_GDOLIB
+void send_get_version()
+{
+    // only used with SECURITY2.0
+    if (doorControlType != DOOR_CONTROL_SEC_PLUS_V2)
+        return;
+    PacketData d;
+    d.type = PacketDataType::NoData;
+    d.value.no_data = NoData();
+    Packet pkt = Packet(PacketCommand::Unknown, d, id_code);
+    PacketAction pkt_ac = {pkt, true, 0};
+    if (!txQueuePush(&pkt_ac))
+    {
+        ESP_LOGE(TAG, "packet queue full, dropping get status pkt");
+    }
+}
+
 void send_get_status()
 {
     // only used with SECURITY2.0
@@ -3450,7 +3496,7 @@ void obstruction_timer()
             {
                 ESP_LOGD(TAG, "Obstruction: Clear (ISR) (%s)", timeString());
                 notify_homekit_obstruction(false);
-                digitalWrite(STATUS_OBST_PIN, HIGH);
+                digitalWrite(STATUS_OBST_PIN, LOW);
             }
         }
         else if (pulse_count == 0)
@@ -3484,7 +3530,7 @@ void obstruction_timer()
                     {
                         ESP_LOGD(TAG, "Obstruction: Detected (ISR) (%s)", timeString());
                         notify_homekit_obstruction(true);
-                        digitalWrite(STATUS_OBST_PIN, LOW);
+                        digitalWrite(STATUS_OBST_PIN, HIGH);
                         if (motionTriggers.bit.obstruction)
                         {
                             notify_homekit_motion(true);

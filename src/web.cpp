@@ -616,12 +616,14 @@ static bool requestAuthenticated()
 #ifdef ESP8266
     if (userConfig->getPasswordRequired() && !server.authenticateDigest(userConfig->getwwwUsername(), userConfig->getwwwCredentials()))
     {
+        ESP_LOGW(TAG, "Authentication request failed");
         server.requestAuthentication(DIGEST_AUTH, www_realm);
         return false;
     }
 #else
     if (userConfig->getPasswordRequired() && !server.authenticate(ratgdoAuthenticate))
     {
+        ESP_LOGW(TAG, "Authentication request failed");
         server.requestAuthentication(DIGEST_AUTH, www_realm);
         return false;
     }
@@ -895,6 +897,7 @@ void build_status_json(char *json)
     JSON_ADD_BOOL(cfg_dcBypassTTC, userConfig->getDCBypassTTC());
     JSON_ADD_BOOL(cfg_obstFromStatus, userConfig->getObstFromStatus());
     JSON_ADD_INT(cfg_dcDebounceDuration, userConfig->getDCDebounceDuration());
+    JSON_ADD_BOOL(cfg_wpDisconnectOnTx, userConfig->getWpDisconnectOnTx());
 #ifdef RATGDO_ENCODER
     JSON_ADD_BOOL("manuallyOperated", garage_door.manuallyOperated);
     JSON_ADD_BOOL(cfg_encoderEnabled, encoder_enabled);
@@ -914,6 +917,7 @@ void build_status_json(char *json)
         JSON_ADD_INT("builtInTTCremaining", garage_door.builtInTTCremaining);
         JSON_ADD_BOOL("builtInTTChold", garage_door.builtInTTChold);
         JSON_ADD_BOOL(cfg_useToggle, userConfig->getUseToggle());
+        JSON_ADD_STR("gdoFirmware", gdoFirmwareVersion);
     }
     if (garage_door.openDuration)
     {
@@ -1016,6 +1020,7 @@ void add_dynamic_mdns()
         MDNS.addServiceTxt("ratgdo", "tcp", "batteryState", std::to_string(garage_door.batteryState).c_str());
         MDNS.addServiceTxt("ratgdo", "tcp", "openingsCount", std::to_string(garage_door.openingsCount).c_str());
         MDNS.addServiceTxt("ratgdo", "tcp", cfg_builtInTTC, std::to_string(userConfig->getBuiltInTTC()).c_str());
+        MDNS.addServiceTxt("ratgdo", "tcp", "gdoFirmware", (const char *)gdoFirmwareVersion);
     }
     MDNS.addServiceTxt("ratgdo", "tcp", cfg_TTCseconds, std::to_string(userConfig->getTTCseconds()).c_str());
     MDNS.addServiceTxt("ratgdo", "tcp", "openDuration", std::to_string(garage_door.openDuration).c_str());
@@ -1603,6 +1608,14 @@ void handle_subscribe()
         return;
     }
 
+    if (logViewer)
+    {
+        ESP_LOGD(TAG, "Require authentication when subscribing to log messages");
+        if (!requestAuthenticated())
+            return;
+    }
+
+
     // validate optional heartbeat interval
     uint32_t heartbeatInterval = 1; // default
     if (heartbeatIntervalArgIdx >= 0)
@@ -1644,18 +1657,24 @@ void handle_subscribe()
 
 void handle_crashlog()
 {
+    if (!requestAuthenticated())
+        return;
     server.client().print(response200);
     ratgdoLogger->printCrashLog(server.client());
 }
 
 void handle_showlog()
 {
+    if (!requestAuthenticated())
+        return;
     server.client().print(response200);
     ratgdoLogger->printMessageLog(server.client());
 }
 
 void handle_showrebootlog()
 {
+    if (!requestAuthenticated())
+        return;
     server.client().print(response200);
 #ifdef ESP8266
     File file = LittleFS.open(REBOOT_LOG_MSG_FILE, "r");

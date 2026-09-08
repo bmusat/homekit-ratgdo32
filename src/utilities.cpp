@@ -233,13 +233,15 @@ void load_all_config_settings()
     ESP_LOGI(TAG, "   nameserverIP:        %s", userConfig->getNameserverIP());
     ESP_LOGI(TAG, "   wwwPWrequired:       %s", userConfig->getPasswordRequired() ? "true" : "false");
     ESP_LOGI(TAG, "   wwwUsername:         %s", userConfig->getwwwUsername());
-    ESP_LOGI(TAG, "   wwwCredentials:      %s", userConfig->getwwwCredentials());
+    // Do not log credentials as it is a security exposure
+    // ESP_LOGI(TAG, "   wwwCredentials:      %s", userConfig->getwwwCredentials());
     ESP_LOGI(TAG, "   GDOSecurityType:     %d", userConfig->getGDOSecurityType());
     ESP_LOGI(TAG, "   TTCseconds:          %d", userConfig->getTTCseconds());
     ESP_LOGI(TAG, "   rebootSeconds:       %d", userConfig->getRebootSeconds());
     ESP_LOGI(TAG, "   LEDidle:             %d", userConfig->getLEDidle());
     ESP_LOGI(TAG, "   motionTriggers:      %d", userConfig->getMotionTriggers());
     ESP_LOGI(TAG, "   obstFromStatus:      %s", userConfig->getObstFromStatus() ? "true" : "false");
+    ESP_LOGI(TAG, "   wpDisconnectOnTx:    %s", userConfig->getWpDisconnectOnTx() ? "true" : "false");
     ESP_LOGI(TAG, "   enableNTP:           %s", userConfig->getEnableNTP() ? "true" : "false");
     ESP_LOGI(TAG, "   doorUpdateAt:        %d (%s)", userConfig->getDoorUpdateAt(), timeString(userConfig->getDoorUpdateAt()));
     ESP_LOGI(TAG, "   doorOpenAt:          %d (%s)", userConfig->getDoorOpenAt(), timeString(userConfig->getDoorOpenAt()));
