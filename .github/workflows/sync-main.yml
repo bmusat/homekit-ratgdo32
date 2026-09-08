@@ -73,11 +73,19 @@ jobs:
 
       - name: Merge main into main-fork
         id: merge_fork
+        # -X theirs: on any conflicting hunk, prefer main's incoming content.
+        # Safe here specifically because main-fork never independently edits
+        # any file main also touches (CHANGELOG.md, README.md, manifest.json) -
+        # its only unique content (FORK-NOTES.md, .github/workflows/*, tools/,
+        # branch-tags.json) has zero overlap with anything upstream owns. Every
+        # conflict seen so far has been "main-fork's stale mirrored copy vs.
+        # main's newer one," always resolved by taking main's side - this
+        # automates exactly that, not a blind guess.
         if: steps.ff.outputs.status == 'ok'
         run: |
           git fetch origin main-fork
           git checkout -B main-fork origin/main-fork
-          if git merge main --no-edit; then
+          if git merge -X theirs main --no-edit; then
             echo "status=ok" >> "$GITHUB_OUTPUT"
           else
             echo "status=conflict" >> "$GITHUB_OUTPUT"
@@ -102,7 +110,7 @@ jobs:
           if [ "${{ steps.merge_fork.outputs.status }}" = "conflict" ]; then
             {
               echo "### WARNING: main-fork merge conflict"
-              echo "main is at \`$TAG\`, but merging main into main-fork produced a conflict. Needs manual resolution."
+              echo "main is at \`$TAG\`, but merging main into main-fork produced a conflict even with -X theirs. That means something other than the routine CHANGELOG/README/manifest.json churn - a modify/delete conflict, a binary conflict, or main-fork picking up unexpected unique content. Needs manual investigation, not just a resolve-and-push."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           else
