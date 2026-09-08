@@ -37,9 +37,27 @@ drifting out of sync with reality.
 
 Status: `laser-fix-hk-sync` is currently running on hardware for a stability burn-in.
 Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one combined upstream PR once burn-in
-looks solid. As of 2026-08-27, both branches are 48 commits behind `upstream/main` (last
-touched 2026-07-24) — a rebase is due, but deliberately held until after a fresh hardware
-flash confirms the current pinned build is still solid.
+looks solid.
+
+### Rebasing fix branches: two different targets for two different purposes
+
+`pinned` builds (see Automation below) aren't anchored to anything stable by default — a
+fix branch only ever reflects whatever `upstream/main` looked like the last time someone
+manually rebased it, then it just sits there while upstream keeps moving. There isn't one
+single correct rebase target; it depends on what the rebase is for:
+
+- **Routine maintenance** (periodically freshening a fix branch so it doesn't rot
+  indefinitely, with no PR imminent): rebase onto the **latest release tag**, same policy
+  as `main`'s own sync. Gives a citable, reproducible base ("built on top of `v3.5.4`")
+  instead of an arbitrary, undocumented point on a moving branch.
+- **Immediately before opening a PR**: rebase onto the **live `upstream/main` tip**, one
+  final time, right before submitting. This isn't optional - GitHub evaluates PR
+  mergeability against the maintainer's actual current `main`, not against whatever tag
+  the branch was last anchored to, so this is the only way to catch (and fix yourself)
+  any real content conflict before the maintainer ever sees it. Basing a submitted PR on
+  an old tag doesn't protect against conflicts, it just delays discovering them.
+
+In short: tag for stability between PRs, live tip right before submitting one.
 
 ## Test builds
 
@@ -73,17 +91,20 @@ your own risk.
 
 - `sync-main.yml` — daily, fast-forwards `main` to upstream's **latest release tag**
   (not `upstream/main`'s branch tip, as of 2026-08-28), then merges `main` into `main-fork`.
-  On success, triggers `build-check.yml`, and the job summary now says so explicitly (with a
-  link to the build-check.yml Actions page) rather than leaving that implicit - the trigger
-  step running gave no visible indication otherwise. Switched from tracking the branch tip to
-  tracking tags because upstream's maintainer treats the tip as a mutable staging area while a
-  release is in progress - repeatedly amending its "Update CHANGELOG.md and version number"
-  commit as more fixes land before the release actually ships. That broke our fast-forward
-  three times in six weeks: 2026-07-18 (v3.5.1), 2026-08-21 (v3.5.2), 2026-08-28 (v3.5.3, still
-  in progress at time of writing). Tags don't move once pushed, so this class of failure
-  shouldn't recur - if `main` still can't fast-forward to the latest tag, that's a genuinely
-  unexpected event worth investigating carefully, not the routine "upstream is mid-release"
-  noise from before.
+  On success, triggers `build-check.yml`, and the job summary says so explicitly (with a
+  link to the build-check.yml Actions page) rather than leaving that implicit. Switched from
+  tracking the branch tip to tracking tags because upstream's maintainer treats the tip as a
+  mutable staging area while a release is in progress - repeatedly amending its "Update
+  CHANGELOG.md and version number" commit as more fixes land before the release ships. Turned
+  out tags aren't fully immune either: on 2026-09-08 the same commit got rewritten again
+  *before* `v3.5.3` was cut, so even the tag didn't descend cleanly from where `main` was
+  parked. As of 2026-09-08, the fast-forward step **auto-recovers**: if `git merge --ff-only`
+  to the latest tag fails, it falls back to `git reset --hard` onto that tag instead of
+  erroring out - safe because `main` is documented to carry zero unique content and the tag
+  is an immutable, deliberately-published release. The job summary flags this clearly
+  (`### :warning: OK, but main was auto-recovered`) so it's visible without being a failure
+  that pages anyone. Separately, `main`'s new content still has to merge into `main-fork`
+  afterward, and that step **is not automated** - see the note below.
 - `build-check.yml` — runs via the `sync-main.yml` chain above or manual dispatch (no
   independent schedule). Dry-run merges the latest upstream into each fix branch (scratch
   only, never pushed) and builds both a `pinned` (as-pushed) and `latest` (merged with
