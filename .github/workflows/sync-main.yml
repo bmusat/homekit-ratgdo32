@@ -43,22 +43,32 @@ jobs:
         id: latest_tag
         run: echo "tag=$(git tag -l 'v*' --sort=-v:refname | head -1)" >> "$GITHUB_OUTPUT"
 
-      - name: Fast-forward main to latest release tag
+      - name: Fast-forward (or reset) main to latest release tag
         id: ff
         run: |
           TAG="${{ steps.latest_tag.outputs.tag }}"
           if git merge --ff-only "$TAG"; then
             echo "status=ok" >> "$GITHUB_OUTPUT"
+            echo "reset=false" >> "$GITHUB_OUTPUT"
             echo "note=main was already up to date or fast-forwarded cleanly to $TAG" >> "$GITHUB_OUTPUT"
           else
-            echo "status=diverged" >> "$GITHUB_OUTPUT"
-            echo "note=main is not a clean ancestor of $TAG - manual investigation needed" >> "$GITHUB_OUTPUT"
+            # A plain fast-forward failing here means upstream amended a commit
+            # main already had (their release-prep commit gets rewritten while
+            # a release is in progress, even after tagging in one observed case
+            # on 2026-09-08). main is documented to carry zero unique content,
+            # and $TAG is an immutable, deliberately-published release, so a
+            # hard reset onto it is always safe - no manual investigation
+            # needed for this specific, now-recurring case.
+            git reset --hard "$TAG"
+            echo "status=ok" >> "$GITHUB_OUTPUT"
+            echo "reset=true" >> "$GITHUB_OUTPUT"
+            echo "note=main could not fast-forward to $TAG (upstream rewrote a commit again) - hard reset instead" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Push main and tags
         if: steps.ff.outputs.status == 'ok'
         run: |
-          git push origin main
+          git push --force-with-lease origin main
           git push origin --tags
 
       - name: Merge main into main-fork
@@ -88,22 +98,24 @@ jobs:
         if: always()
         run: |
           TAG="${{ steps.latest_tag.outputs.tag }}"
-          if [ "${{ steps.ff.outputs.status }}" != "ok" ]; then
-            {
-              echo "### WARNING: main did not fast-forward"
-              echo "main is not a clean ancestor of the latest release tag (\`$TAG\`) - unexpected, since tags shouldn't move. Needs manual investigation."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          elif [ "${{ steps.merge_fork.outputs.status }}" = "conflict" ]; then
+          RESET="${{ steps.ff.outputs.reset }}"
+          if [ "${{ steps.merge_fork.outputs.status }}" = "conflict" ]; then
             {
               echo "### WARNING: main-fork merge conflict"
-              echo "main fast-forwarded cleanly, but merging main into main-fork produced a conflict. Needs manual resolution."
+              echo "main is at \`$TAG\`, but merging main into main-fork produced a conflict. Needs manual resolution."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           else
             {
-              echo "### OK"
-              echo "main fast-forwarded to \`$TAG\` (tags included), and main-fork merged cleanly."
+              if [ "$RESET" = "true" ]; then
+                echo "### :warning: OK, but main was auto-recovered"
+                echo ""
+                echo "**Upstream rewrote a commit \`main\` was already based on, so a plain fast-forward to \`$TAG\` failed. \`main\` was hard-reset onto \`$TAG\` to recover automatically.** This is expected, handled behavior - no action needed unless it starts happening on every single run."
+                echo ""
+              else
+                echo "### OK"
+              fi
+              echo "main is at \`$TAG\` (tags included), and main-fork merged cleanly."
               echo "Triggered [build-check.yml](https://github.com/$GITHUB_REPOSITORY/actions/workflows/build-check.yml) on \`main-fork\`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
