@@ -17,27 +17,27 @@ below in the Tools section) and the CI automation below.
   immediately on door-open instead of waiting on vehicle-presence detection, which took 6+
   minutes on my install. Minimal, single-commit timing fix — no HomeKit changes.
 - **[`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync)** — Branched on top of
-  `laser-on-door-open`, adds one more commit: fixes HomeKit not reflecting laser state changes
+  `laser-on-door-open`, adds two more commits: fixes HomeKit not reflecting laser state changes
   that originate from firmware (door-open trigger, vehicle-arrival trigger, or the auto-off
-  timer) instead of a manual toggle. Kept as a separate branch on top so the timing fix and
-  the HomeKit-sync fix stay as distinct, individually reviewable commits. Current plan is to
-  submit both together as one combined upstream PR once this branch has had a stability
-  burn-in on hardware.
+  timer) instead of a manual toggle, plus README documentation for the door-open checkbox.
+  Kept as a separate branch on top so the timing fix and the HomeKit-sync fix stay as distinct,
+  individually reviewable commits.
+
+**Submitted upstream 2026-09-08 as [ratgdo/homekit-ratgdo32#201](https://github.com/ratgdo/homekit-ratgdo32/pull/201)**
+("Add opt-in door-open laser trigger with HomeKit state sync") — both branches combined into
+one PR (4 commits), rebased onto upstream's live `main` tip immediately before submitting.
+Offered to split into two PRs if the maintainer would rather review them separately.
 
 | Branch | Based on | Status |
 |---|---|---|
-| [`laser-on-door-open`](../../tree/laser-on-door-open) | `upstream/main` directly | — |
-| [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 1 commit | Running on hardware (burn-in) |
+| [`laser-on-door-open`](../../tree/laser-on-door-open) | `upstream/main` directly | Part of PR #201 |
+| [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 2 commits | Part of PR #201, awaiting review |
 
 Live staleness for each branch (commits behind `upstream/main`, days since its last commit) is
 reported automatically in every `pinned` job's summary on the
 [build-check.yml Actions page](../../actions/workflows/build-check.yml) — deliberately not
 hand-tracked here anymore, since a number like that goes stale within a day and this note kept
 drifting out of sync with reality.
-
-Status: `laser-fix-hk-sync` is currently running on hardware for a stability burn-in.
-Plan: `laser-on-door-open` + `laser-fix-hk-sync` as one combined upstream PR once burn-in
-looks solid.
 
 ### Rebasing fix branches: two different targets for two different purposes
 
