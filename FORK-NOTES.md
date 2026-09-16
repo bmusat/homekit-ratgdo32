@@ -105,7 +105,12 @@ starts.
   (one `-X theirs` can't resolve, e.g. a modify/delete conflict) means something unusual
   happened and is worth real investigation, not routine release-cycle churn.
 - `build-check.yml` — runs via the `sync-main.yml` chain above or manual dispatch (no
-  independent schedule). Dry-run merges the latest upstream into each fix branch (scratch
+  independent schedule). The branch matrix is derived dynamically from `branch-tags.json`'s
+  keys (a `setup` job reads it and outputs the list; the actual build job is skipped entirely,
+  not run with an empty matrix, when there are zero active branches) — as of 2026-09-16, rather
+  than also hardcoding the same branch list in this file's YAML, which could drift out of sync
+  with `branch-tags.json` and which fails workflow validation outright if written as a literal
+  empty array. Dry-run merges the latest upstream into each fix branch (scratch
   only, never pushed) and builds both a `pinned` (as-pushed) and `latest` (merged with
   upstream) variant via PlatformIO. Skips rebuilding when the exact code combination was
   already verified and the artifact is still fresh (7-day cap). Result is written to the
