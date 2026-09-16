@@ -14,16 +14,36 @@ env:
   CACHE_EPOCH: "6"
 
 jobs:
-  build-check:
+  setup:
+    # Derives the branch matrix from branch-tags.json instead of hardcoding it
+    # here too - having two places list the active branches (this file and
+    # branch-tags.json) meant they could drift out of sync, and a literal empty
+    # matrix array in YAML (`branch: []`) fails workflow validation outright
+    # when there are no active fix branches, which happens between PRs.
     if: github.repository == 'bmusat/homekit-ratgdo32'
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.list.outputs.branches }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/branch-tags.json
+          sparse-checkout-cone-mode: false
+      - id: list
+        run: echo "branches=$(jq -c 'keys' .github/branch-tags.json)" >> "$GITHUB_OUTPUT"
+
+  build-check:
+    needs: setup
+    # Skips the whole job (matrix never expanded) when there are no active fix
+    # branches, rather than relying on a dynamically-empty matrix being handled
+    # gracefully - explicit is safer here than assuming the runtime behavior.
+    if: github.repository == 'bmusat/homekit-ratgdo32' && needs.setup.outputs.branches != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # No fix branches active right now (laser-on-door-open/laser-fix-hk-sync
-        # shipped in ratgdo/homekit-ratgdo32#201, retired 2026-09-16). Add new
-        # branch names here as they're created.
-        branch: []
+        branch: ${{ fromJson(needs.setup.outputs.branches) }}
         variant: [pinned, latest]
     steps:
       - uses: actions/checkout@v7
