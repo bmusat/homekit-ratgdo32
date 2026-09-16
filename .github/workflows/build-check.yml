@@ -20,7 +20,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [laser-on-door-open, laser-fix-hk-sync]
+        # No fix branches active right now (laser-on-door-open/laser-fix-hk-sync
+        # shipped in ratgdo/homekit-ratgdo32#201, retired 2026-09-16). Add new
+        # branch names here as they're created.
+        branch: []
         variant: [pinned, latest]
     steps:
       - uses: actions/checkout@v7

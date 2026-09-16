@@ -3,8 +3,9 @@
 [![Sync main](https://github.com/bmusat/homekit-ratgdo32/actions/workflows/sync-main.yml/badge.svg?branch=main-fork)](https://github.com/bmusat/homekit-ratgdo32/actions/workflows/sync-main.yml)
 
 This is my fork of [ratgdo/homekit-ratgdo32](https://github.com/ratgdo/homekit-ratgdo32),
-maintained to develop and test personal bug fixes before submitting them upstream.  Currently
-there are two branches tracked here.
+maintained to develop and test personal bug fixes before submitting them upstream. No fix
+branches are currently active — see "Deleted branches (historical)" below for what's shipped
+so far.
 
 `main` is kept as an untouched, byte-for-byte mirror of upstream `main` which is always safe to
 fast-forward. This branch (`main-fork`) is the default branch and it carries the same source
@@ -13,31 +14,12 @@ below in the Tools section) and the CI automation below.
 
 ## Active fix branches
 
-- **[`laser-on-door-open`](../../tree/laser-on-door-open)** — Fires the parking-assist laser
-  immediately on door-open instead of waiting on vehicle-presence detection, which took 6+
-  minutes on my install. Minimal, single-commit timing fix — no HomeKit changes.
-- **[`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync)** — Branched on top of
-  `laser-on-door-open`, adds two more commits: fixes HomeKit not reflecting laser state changes
-  that originate from firmware (door-open trigger, vehicle-arrival trigger, or the auto-off
-  timer) instead of a manual toggle, plus README documentation for the door-open checkbox.
-  Kept as a separate branch on top so the timing fix and the HomeKit-sync fix stay as distinct,
-  individually reviewable commits.
-
-**Submitted upstream 2026-09-08 as [ratgdo/homekit-ratgdo32#201](https://github.com/ratgdo/homekit-ratgdo32/pull/201)**
-("Add opt-in door-open laser trigger with HomeKit state sync") — both branches combined into
-one PR (4 commits), rebased onto upstream's live `main` tip immediately before submitting.
-Offered to split into two PRs if the maintainer would rather review them separately.
-
-| Branch | Based on | Status |
-|---|---|---|
-| [`laser-on-door-open`](../../tree/laser-on-door-open) | `upstream/main` directly | Part of PR #201 |
-| [`laser-fix-hk-sync`](../../tree/laser-fix-hk-sync) | `laser-on-door-open` + 2 commits | Part of PR #201, awaiting review |
-
-Live staleness for each branch (commits behind `upstream/main`, days since its last commit) is
-reported automatically in every `pinned` job's summary on the
-[build-check.yml Actions page](../../actions/workflows/build-check.yml) — deliberately not
-hand-tracked here anymore, since a number like that goes stale within a day and this note kept
-drifting out of sync with reality.
+None right now. `laser-on-door-open` and `laser-fix-hk-sync` shipped upstream in
+[ratgdo/homekit-ratgdo32#201](https://github.com/ratgdo/homekit-ratgdo32/pull/201) and were
+retired — see "Deleted branches (historical)" below. The next fix branch, whenever one starts,
+should follow the same pattern: branch from `main`/`upstream/main` directly (never from
+`main-fork`), get a `build-check.yml` matrix entry and a `branch-tags.json` short-name mapping,
+and use the rebase policy below.
 
 ### Rebasing fix branches: two different targets for two different purposes
 
@@ -66,7 +48,8 @@ whenever `build-check.yml` succeeds (see Automation below) — grab one from the
 [Releases page](../../releases) (also linked in the sidebar) to try a branch without
 setting up a PlatformIO build environment yourself. These are unofficial, unvetted test
 builds from a personal fork, not affiliated with the upstream ratgdo project — use at
-your own risk.
+your own risk. With no fix branches currently active, this page is empty until the next one
+starts.
 
 ### Deleted branches (historical)
 
@@ -86,6 +69,16 @@ your own risk.
   2026-08-14) — same two characteristics, same `updated()` guard, same reasoning. `main`/
   `main-fork` now carries upstream's version, so this branch is redundant, not wrong. Kept here
   only as a historical note.
+- ~~`laser-on-door-open`~~ and ~~`laser-fix-hk-sync`~~ — deleted 2026-09-16. Fired the
+  parking-assist laser immediately on door-open (opt-in `laserOnDoorOpen` checkbox) and synced
+  HomeKit's laser toggle to firmware-initiated state changes. Submitted 2026-09-08 as
+  [ratgdo/homekit-ratgdo32#201](https://github.com/ratgdo/homekit-ratgdo32/pull/201), **merged
+  upstream 2026-09-14** (squash-merged as a single commit, `f355a1d`). Retired once merged since
+  their purpose was fully served — `main`/`main-fork` will carry the native version once
+  upstream's next release tag includes it. (Squash-merging did mean `build-check.yml`'s `latest`
+  variant started failing for both branches on 2026-09-15/16 — a real, unresolvable conflict
+  between the original commits and their own squashed selves already in `upstream/main` - which
+  is what actually surfaced that it was time to retire them.)
 
 ## Automation
 
@@ -103,8 +96,14 @@ your own risk.
   erroring out - safe because `main` is documented to carry zero unique content and the tag
   is an immutable, deliberately-published release. The job summary flags this clearly
   (`### :warning: OK, but main was auto-recovered`) so it's visible without being a failure
-  that pages anyone. Separately, `main`'s new content still has to merge into `main-fork`
-  afterward, and that step **is not automated** - see the note below.
+  that pages anyone. Separately, `main`'s new content then merges into `main-fork` — as of
+  2026-09-08 this step also auto-resolves, using `git merge -X theirs main`: on any conflicting
+  hunk, prefer `main`'s incoming content. Safe specifically because `main-fork` never
+  independently edits any file `main` also touches (`CHANGELOG.md`, `README.md`,
+  `docs/manifest.json`) — its only unique content (this file, `.github/workflows/*`, `tools/`,
+  `branch-tags.json`) has zero overlap with anything upstream owns. A genuine conflict here now
+  (one `-X theirs` can't resolve, e.g. a modify/delete conflict) means something unusual
+  happened and is worth real investigation, not routine release-cycle churn.
 - `build-check.yml` — runs via the `sync-main.yml` chain above or manual dispatch (no
   independent schedule). Dry-run merges the latest upstream into each fix branch (scratch
   only, never pushed) and builds both a `pinned` (as-pushed) and `latest` (merged with
@@ -124,8 +123,8 @@ your own risk.
   directly confirm a release matches what's currently running. Every `pinned` job's summary
   (both `OK` and `SKIPPED` outcomes) also reports how many commits behind `upstream/main` the
   branch tip is and how many days since its last commit, added 2026-08-27 so staleness is
-  visible without running git commands by hand - see "Active fix branches" above for the
-  reasoning on why that number isn't also hand-copied into this file.
+  visible without running git commands by hand, rather than hand-copied into this file where
+  it would drift stale within a day.
 - `cleanup-branch-release.yml` — fires on GitHub's `delete` branch event. Looks up the
   deleted branch's short name in `branch-tags.json` and deletes the matching pre-release
   (if any), so a merged/abandoned branch's release doesn't linger forever. Delete the
