@@ -545,7 +545,7 @@ void setup_web()
     server.on("/update", HTTP_POST, handle_update, handle_firmware_upload);
     server.onNotFound(handle_everything);
     // here the list of headers to be recorded
-    const char *headerkeys[] = {"If-None-Match"};
+    const char *headerkeys[] = {"If-None-Match", "X-API-Key"};
     size_t headerkeyssize = sizeof(headerkeys) / sizeof(char *);
     // ask server to track these headers
     server.collectHeaders(headerkeys, headerkeyssize);
@@ -613,21 +613,29 @@ String *ratgdoAuthenticate(HTTPAuthMethod mode, String enteredUsernameOrReq, Str
 // Returns false if a 401 challenge was sent.
 static bool requestAuthenticated()
 {
+    if (userConfig->getPasswordRequired())
+    {
+        if (server.hasHeader("X-API-Key"))
+        {
+            // This X-API-Key method is workaround for Safari web browser not supporting Digest Authentication properly.
+            if (strcmp(server.header("X-API-Key").c_str(), userConfig->getwwwCredentials()) != 0)
+            {
+                ESP_LOGW(TAG, "X-API-Key authentication request failed");
+                server.send(403, "text/plain", "Unauthorized API Key");
+                return false;
+            }
+        }
 #ifdef ESP8266
-    if (userConfig->getPasswordRequired() && !server.authenticateDigest(userConfig->getwwwUsername(), userConfig->getwwwCredentials()))
-    {
-        ESP_LOGW(TAG, "Authentication request failed");
-        server.requestAuthentication(DIGEST_AUTH, www_realm);
-        return false;
-    }
+        else if (!server.authenticateDigest(userConfig->getwwwUsername(), userConfig->getwwwCredentials()))
 #else
-    if (userConfig->getPasswordRequired() && !server.authenticate(ratgdoAuthenticate))
-    {
-        ESP_LOGW(TAG, "Authentication request failed");
-        server.requestAuthentication(DIGEST_AUTH, www_realm);
-        return false;
-    }
+        else if (!server.authenticate(ratgdoAuthenticate))
 #endif
+        {
+            ESP_LOGW(TAG, "Authentication request failed");
+            server.requestAuthentication(DIGEST_AUTH, www_realm);
+            return false;
+        }
+    }
     return true;
 }
 
@@ -967,6 +975,7 @@ void build_status_json(char *json)
     JSON_ADD_INT(cfg_vehicleThreshold, userConfig->getVehicleThreshold());
     JSON_ADD_BOOL(cfg_laserEnabled, userConfig->getLaserEnabled());
     JSON_ADD_BOOL(cfg_laserHomeKit, userConfig->getLaserHomeKit());
+    JSON_ADD_BOOL(cfg_laserOnDoorOpen, userConfig->getLaserOnDoorOpen());
     JSON_ADD_INT(cfg_assistDuration, userConfig->getAssistDuration());
     JSON_ADD_BOOL(cfg_TTCsound, userConfig->getTTCsound());
 #endif
@@ -1252,7 +1261,6 @@ bool helperAssistLaser(const std::string &key, const char *value, configSetting 
         laser.on();
     else
         laser.off();
-    notify_homekit_laser(atoi(value) == 1);
     return true;
 }
 #endif
@@ -1615,7 +1623,6 @@ void handle_subscribe()
             return;
     }
 
-
     // validate optional heartbeat interval
     uint32_t heartbeatInterval = 1; // default
     if (heartbeatIntervalArgIdx >= 0)
@@ -1848,12 +1855,7 @@ void handle_firmware_upload()
     if (upload.status == UPLOAD_FILE_START)
     {
         _updaterError.clear();
-
-#ifdef ESP8266
-        _authenticatedUpdate = !userConfig->getPasswordRequired() || server.authenticateDigest(userConfig->getwwwUsername(), userConfig->getwwwCredentials());
-#else
-        _authenticatedUpdate = !userConfig->getPasswordRequired() || server.authenticate(ratgdoAuthenticate);
-#endif
+        _authenticatedUpdate = !userConfig->getPasswordRequired() || requestAuthenticated();
         if (!_authenticatedUpdate)
         {
             ESP_LOGE(TAG, "Unauthenticated Update");

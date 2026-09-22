@@ -24,6 +24,9 @@ var setGDOcmds = {              // setGDO commands that are not sent from server
 var gitUser = "ratgdo";         // default git user.
 var gitRepo = "homekit-ratgdo"; // default git repository.
 
+var passwordHash = undefined;
+const www_realm = "RATGDO Login Required";
+
 // See... https://github.com/nayarsystems/posix_tz_db
 // This is CSV form of the data, available at this web page.
 const timeZonesURL = "https://raw.githubusercontent.com/nayarsystems/posix_tz_db/refs/heads/master/zones.csv";
@@ -177,6 +180,7 @@ function toggleEncoderOptions() {
 // enable laser
 function enableLaser(value) {
     document.getElementById('laserHomeKit').disabled = !value;
+    document.getElementById('laserOnDoorOpen').disabled = !value;
     document.getElementById("laserButton").style.display = (value) ? "inline-block" : "none";
     document.getElementById("assistDuration").disabled = !value;
     document.getElementById("parkAssist").style.opacity = value ? "1" : "0.5";
@@ -491,6 +495,7 @@ function setElementsFromStatus(status) {
                 document.getElementById("vehicleSettingsSpacer").style.display = (value) ? "table-row" : "none";
                 setVehicleConfigVisibility(value);
                 document.getElementById("laserSetting").style.display = (value) ? "table-row" : "none";
+                document.getElementById("laserOnDoorOpenRow").style.display = (value) ? "table-row" : "none";
                 break;
             case "vehicleThreshold":
                 document.getElementById(key).value = value;
@@ -505,6 +510,7 @@ function setElementsFromStatus(status) {
                 document.getElementById(key).checked = value;
                 document.getElementById("laserButton").style.display = (value) ? "inline-block" : "none";
                 document.getElementById("laserHomeKit").disabled = !value;
+                document.getElementById("laserOnDoorOpen").disabled = !value;
                 document.getElementById("parkAssist").style.display = (value) ? "table-row" : "none";
                 break;
             case "homespanCLI":
@@ -528,6 +534,7 @@ function setElementsFromStatus(status) {
                 setVehicleSensorOptionState(value);
                 break;
             case "laserHomeKit":
+            case "laserOnDoorOpen":
             case "useToggle":
             case "useSWserial":
             case "obstFromStatus":
@@ -1172,7 +1179,7 @@ async function unpairRATGDO() {
     }
     loaderElem.style.visibility = "visible";
     var response = await fetch("reset", {
-        method: "POST",
+        method: "POST", headers: { 'X-API-Key': passwordHash }
     });
     loaderElem.style.visibility = "hidden";
     if (response.status !== 200) {
@@ -1182,20 +1189,77 @@ async function unpairRATGDO() {
     countdown(rebootSeconds, "RATGO un-pairing and rebooting...&nbsp;");
 }
 
-async function checkAuth(loader = true) {
-    auth = false;
-    if (loader) loaderElem.style.visibility = "visible";
-    var response = await fetch("auth", {
-        method: "GET",
-    });
-    if (loader) loaderElem.style.visibility = "hidden";
-    // Give browser a moment to actually hide the spinner...
-    await new Promise(r => setTimeout(r, 50));
-    if (response.status == 200) {
-        auth = true;
+async function promptPassword() {
+    if (serverStatus?.passwordRequired && passwordHash === undefined) {
+        const password = await new Promise((resolve) => {
+            const modal = document.getElementById("passwordModal");
+            const form = document.getElementById("passwordForm");
+            const username = document.getElementById("authUsername");
+            const input = document.getElementById("authPassword");
+            const cancel = document.getElementById("passwordCancel");
+            const finish = (value) => {
+                form.removeEventListener("submit", submit);
+                username.removeEventListener("keydown", submitOnEnter);
+                input.removeEventListener("keydown", submitOnEnter);
+                cancel.removeEventListener("click", cancelPassword);
+                modal.style.display = "none";
+                username.value = "";
+                input.value = "";
+                resolve(value);
+            };
+            const submit = (event) => {
+                event.preventDefault();
+                finish({ username: username.value, password: input.value });
+            };
+            const submitOnEnter = (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    submit(event);
+                }
+            };
+            const cancelPassword = () => finish(null);
+
+            form.addEventListener("submit", submit);
+            username.addEventListener("keydown", submitOnEnter);
+            input.addEventListener("keydown", submitOnEnter);
+            cancel.addEventListener("click", cancelPassword);
+            username.value = serverStatus.userName || "admin";
+            modal.style.display = "block";
+            input.focus();
+        });
+        if (password === null) {
+            console.warn("User cancelled password dialog");
+            return false;
+        }
+        // MD5() function expects a Uint8Array typed ArrayBuffer...
+        passwordHash = MD5((new TextEncoder).encode(password.username + ":" + www_realm + ":" + password.password));
     }
-    else if (response.status == 401) {
-        console.warn("Not Authenticated");
+    return true;
+}
+
+async function checkAuth(loader = true) {
+    let auth = false;
+    let prompt = (serverStatus?.passwordRequired && passwordHash === undefined);
+    if (await promptPassword()) {
+        if (loader) loaderElem.style.visibility = "visible";
+        let response = await fetch("auth", { method: "GET", headers: { 'X-API-Key': passwordHash } });
+        if (loader) loaderElem.style.visibility = "hidden";
+        // Give browser a moment to actually hide the spinner...
+        await new Promise(r => setTimeout(r, 50));
+        if (response.status == 200) {
+            auth = true;
+        }
+        else if (response.status == 401) {
+            console.warn("401 Not Authenticated");
+        }
+        else if (response.status == 403) {
+            console.warn("403 Forbidden, authentication failed");
+            passwordHash = undefined;
+            if (prompt) alert("Authentication failed, please try again.");
+        }
+        else {
+            console.warn(`Unexpected response from server: ${response.status}`);
+        }
     }
     return auth;
 }
@@ -1229,6 +1293,7 @@ async function setGDO(...args) {
                 method: "POST",
                 body: formData,
                 signal: AbortSignal.timeout(2000),
+                headers: { 'X-API-Key': passwordHash }
             });
             if (response.status !== 200) {
                 console.warn("Error setting RATGDO state");
@@ -1278,18 +1343,18 @@ async function changePassword() {
     }
     let www_username = document.getElementById("newUserName").value.substring(0, 30);
     if (www_username.length == 0) www_username = serverStatus.userName ?? "admin";
-    const www_realm = "RATGDO Login Required";
     // MD5() function expects a Uint8Array typed ArrayBuffer...
-    const passwordHash = MD5((new TextEncoder).encode(www_username + ":" + www_realm + ":" + newPW.value));
-    console.log("Set new credentials to: " + passwordHash);
+    let newHash = MD5((new TextEncoder).encode(www_username + ":" + www_realm + ":" + newPW.value));
+    console.log("Set new credentials");
     await setGDO("credentials", JSON.stringify({
         username: www_username,
-        credentials: passwordHash,
+        credentials: newHash,
         password: newPW.value
     }));
     clearTimeout(checkHeartbeat);
     // On success, go to home page.
     // User will have to re-authenticate to get back to settings.
+    passwordHash = undefined;
     location.href = "/";
     return;
 }
@@ -1412,6 +1477,7 @@ async function saveSettings() {
     const vehicleDepartingHomeKit = (document.getElementById("vehicleDepartingHomeKit").checked) ? '1' : '0';
     const laserEnabled = (document.getElementById("laserEnabled").checked) ? '1' : '0';
     const laserHomeKit = (document.getElementById("laserHomeKit").checked) ? '1' : '0';
+    const laserOnDoorOpen = (document.getElementById("laserOnDoorOpen").checked) ? '1' : '0';
     const dcOpenClose = (document.getElementById("dcOpenClose").checked) ? '1' : '0';
     const dcBypassTTC = (document.getElementById("dcBypassTTC").checked) ? '1' : '0';
     const useToggle = (document.getElementById("useToggle").checked) ? '1' : '0';
@@ -1488,6 +1554,7 @@ async function saveSettings() {
         "vehicleDepartingHomeKit", vehicleDepartingHomeKit,
         "laserEnabled", laserEnabled,
         "laserHomeKit", laserHomeKit,
+        "laserOnDoorOpen", laserOnDoorOpen,
         "dcOpenClose", dcOpenClose,
         "dcBypassTTC", dcBypassTTC,
         "useToggle", useToggle,
